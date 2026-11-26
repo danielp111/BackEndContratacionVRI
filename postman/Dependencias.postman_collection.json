@@ -1,0 +1,474 @@
+{
+  "info": {
+    "name": "Contratación VRI - Dependencias",
+    "description": "Pruebas del catálogo de dependencias. Ejecutar COMPLETA y EN ORDEN con el Collection Runner o con newman: cada petición usa los datos que guardó la anterior.\n\nLa carpeta 00 genera nombres únicos por ejecución y verifica la carga inicial (data.sql): las 55 dependencias de la lista de la VRI, con tildes y sin prefijo, y la Vicerrectoría de Investigaciones con id 1.\n\nCada ejecución crea 2 dependencias de prueba y al final las deja INACTIVAS, para que no aparezcan en los selectores.\n\nLa prueba 1.4 (repetido sin tildes) depende de la collation de MySQL: solo pasa contra MySQL.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "sufijo", "value": "" },
+    { "key": "dependenciaId", "value": "" },
+    { "key": "dependencia2Id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Verificar las dependencias de la carga inicial",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Sufijo único por ejecución para que los nombres de prueba no choquen con ejecuciones anteriores.",
+                  "pm.collectionVariables.set('sufijo', Date.now().toString().slice(-8));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const nombres = pm.response.json().map(d => d.nombre);",
+                  "pm.test('Al menos las 55 dependencias de la lista de la VRI', () => pm.expect(nombres.length).to.be.at.least(55));",
+                  "pm.test('Nombres con tildes, tal como se escriben', () => {",
+                  "    pm.expect(nombres).to.include('Vicerrectoría de Investigaciones');",
+                  "    pm.expect(nombres).to.include('Facultad de Ciencias Contables, Económicas y Administrativas');",
+                  "    pm.expect(nombres).to.include('Centro Universitario en Salud Alfonso López');",
+                  "});",
+                  "pm.test('Divisiones, oficinas y áreas sin prefijo', () => {",
+                  "    pm.expect(nombres).to.include('de Admisiones');",
+                  "    pm.expect(nombres).to.include('Jurídica');",
+                  "    pm.expect(nombres).to.include('de Desarrollo Editorial');",
+                  "});",
+                  "pm.test('Ningún nombre en mayúsculas sostenidas por la regla anterior', () => pm.expect(nombres).to.not.include('VICERRECTORÍA DE INVESTIGACIONES'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dependencias?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["dependencias"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Verificar que la Vicerrectoría de Investigaciones es el id 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('id 1 = Vicerrectoría de Investigaciones', () => pm.expect(pm.response.json().nombre).to.eql('Vicerrectoría de Investigaciones'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/dependencias/1" }
+        }
+      ]
+    },
+    {
+      "name": "01 Crear",
+      "item": [
+        {
+          "name": "1.1 Crear dependencia (conserva mayúsculas y tildes, limpia espacios)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created con Location', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.response.to.have.header('Location');",
+                  "});",
+                  "const d = pm.response.json();",
+                  "pm.test('Nombre tal como se escribe, sin espacios sobrantes', () => pm.expect(d.nombre).to.eql('Oficina de Investigación D' + pm.collectionVariables.get('sufijo')));",
+                  "pm.test('Queda activa', () => pm.expect(d.activo).to.be.true);",
+                  "pm.collectionVariables.set('dependenciaId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"  Oficina   de Investigación D{{sufijo}} \"\n}" },
+            "url": "{{baseUrl}}/dependencias"
+          }
+        },
+        {
+          "name": "1.2 Crear dependencia sin prefijo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Se guarda tal cual', () => pm.expect(pm.response.json().nombre).to.eql('de Pruebas D' + pm.collectionVariables.get('sufijo')));",
+                  "pm.collectionVariables.set('dependencia2Id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"de Pruebas D{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/dependencias"
+          }
+        },
+        {
+          "name": "1.3 Rechazar nombre repetido en mayúsculas (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('Código GC-0002', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0002'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"OFICINA DE INVESTIGACIÓN D{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/dependencias"
+          }
+        },
+        {
+          "name": "1.4 Rechazar nombre repetido sin tildes ni mayúsculas (409, MySQL)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('\"vicerrectoria de investigaciones\" choca con la de la carga inicial', () => pm.expect(pm.response.json().codigoError).to.be.oneOf(['GC-0002', 'GC-0007']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"vicerrectoria de investigaciones\"\n}" },
+            "url": "{{baseUrl}}/dependencias"
+          }
+        },
+        {
+          "name": "1.5 Rechazar nombre vacío (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Datos inválidos GC-0005 con el campo nombre', () => {",
+                  "    pm.expect(e.codigoError).to.eql('GC-0005');",
+                  "    pm.expect(e.errores).to.have.property('nombre');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"   \"\n}" },
+            "url": "{{baseUrl}}/dependencias"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Actualizar",
+      "item": [
+        {
+          "name": "2.1 Actualizar conservando el texto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Nombre nuevo tal como se escribe', () => pm.expect(pm.response.json().nombre).to.eql('Área de Pruebas D' + pm.collectionVariables.get('sufijo')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"  Área   de Pruebas D{{sufijo}} \"\n}" },
+            "url": "{{baseUrl}}/dependencias/{{dependencia2Id}}"
+          }
+        },
+        {
+          "name": "2.2 Rechazar actualizar al nombre de otra (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('Explica el choque', () => pm.expect(pm.response.json().mensaje).to.include('Ya existe otra dependencia llamada'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"oficina de investigación D{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/dependencias/{{dependencia2Id}}"
+          }
+        },
+        {
+          "name": "2.3 Actualizar dependencia inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código GC-0003', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0003'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"No existe\"\n}" },
+            "url": "{{baseUrl}}/dependencias/999999999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Estado",
+      "item": [
+        {
+          "name": "3.1 Inactivar la dependencia 1 de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactiva', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dependencias/{{dependenciaId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["dependencias", "{{dependenciaId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "3.2 Las activas (selector) ya no la ofrecen",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('Excluye la dependencia inactiva', () => pm.expect(lista.map(d => d.id)).to.not.include(Number(pm.collectionVariables.get('dependenciaId'))));",
+                  "pm.test('Solo trae activas', () => pm.expect(lista.every(d => d.activo)).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dependencias?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["dependencias"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "3.3 Listar dependencias inactivas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('Incluye la de prueba y solo trae inactivas', () => {",
+                  "    pm.expect(lista.map(d => d.id)).to.include(Number(pm.collectionVariables.get('dependenciaId')));",
+                  "    pm.expect(lista.every(d => d.activo === false)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dependencias?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["dependencias"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "3.4 Reactivar la dependencia 1 de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a estar activa', () => pm.expect(pm.response.json().activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dependencias/{{dependenciaId}}/estado?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["dependencias", "{{dependenciaId}}", "estado"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "3.5 Consultar dependencia inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/dependencias/999999999" }
+        },
+        {
+          "name": "3.6 Rechazar cuerpo que no es JSON (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 415 Unsupported Media Type', () => pm.response.to.have.status(415));",
+                  "pm.test('Código GC-0010', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0010'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "text/plain" }],
+            "body": { "mode": "raw", "raw": "Rectoría" },
+            "url": "{{baseUrl}}/dependencias"
+          }
+        }
+      ]
+    },
+    {
+      "name": "99 Limpieza",
+      "item": [
+        {
+          "name": "Inactivar la dependencia 1 de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactiva (no aparece en selectores)', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dependencias/{{dependenciaId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["dependencias", "{{dependenciaId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "Inactivar la dependencia 2 de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactiva (no aparece en selectores)', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dependencias/{{dependencia2Id}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["dependencias", "{{dependencia2Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

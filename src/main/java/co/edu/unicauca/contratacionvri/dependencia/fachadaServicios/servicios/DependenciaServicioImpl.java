@@ -37,7 +37,7 @@ public class DependenciaServicioImpl implements IDependenciaServicio {
     @Override
     @Transactional
     public DependenciaDTORespuesta crear(DependenciaDTOPeticion peticion) {
-        peticion.setNombre(Textos.limpiarMayusculas(peticion.getNombre()));
+        peticion.setNombre(Textos.limpiar(peticion.getNombre()));
         if (repositorio.existsByNombreIgnoreCase(peticion.getNombre())) {
             throw new EntidadYaExisteException("Ya existe la dependencia " + peticion.getNombre());
         }
@@ -50,7 +50,7 @@ public class DependenciaServicioImpl implements IDependenciaServicio {
     @Transactional
     public DependenciaDTORespuesta actualizar(Long id, DependenciaDTOPeticion peticion) {
         DependenciaEntity dependencia = buscar(id);
-        peticion.setNombre(Textos.limpiarMayusculas(peticion.getNombre()));
+        peticion.setNombre(Textos.limpiar(peticion.getNombre()));
         if (repositorio.existsByNombreIgnoreCaseAndIdNot(peticion.getNombre(), id)) {
             throw new EntidadYaExisteException("Ya existe otra dependencia llamada " + peticion.getNombre());
         }
