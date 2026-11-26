@@ -16,6 +16,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
+import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.AmbitoClase;
+import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.ClaseContratoEntity;
+import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.repositorios.ClaseContratoRepositorio;
 import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.ConsecutivoEntity;
 import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.ConsecutivoId;
 import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.SerieDocumentalEntity;
@@ -47,6 +50,9 @@ class CargaInicialTest {
 
     @Autowired
     private ConsecutivoRepositorio consecutivos;
+
+    @Autowired
+    private ClaseContratoRepositorio clases;
 
     @Autowired
     private INumeracionServicio numeracion;
@@ -160,5 +166,50 @@ class CargaInicialTest {
         // Los ids fijos de la carga no deben chocar con los que genera la base para registros nuevos.
         var nueva = serieServicio.crear(new SerieDocumentalDTOPeticion("6.1-17.99"));
         assertThat(nueva.getId()).isGreaterThan(15);
+    }
+
+    // ------------------------------------------------------------------ clases de contrato SIRECI
+
+    private ClaseContratoEntity clase(AmbitoClase ambito, int codigo) {
+        return clases.findAll().stream()
+                .filter(c -> c.getAmbito() == ambito && c.getCodigoSireci() == codigo).findFirst().orElseThrow();
+    }
+
+    @Test
+    @Order(7)
+    void cargaLas30ClasesDeContratoY2DeConvenio() {
+        assertThat(clases.count()).isEqualTo(32);
+        assertThat(clases.buscar(AmbitoClase.CONTRATO, null)).extracting(ClaseContratoEntity::getCodigoSireci)
+                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 30).boxed().toList());
+        assertThat(clases.buscar(AmbitoClase.CONVENIO, null)).extracting(ClaseContratoEntity::getEtiqueta)
+                .containsExactly("1 CONTRATO / CONVENIO INTERADMINISTRATIVO",
+                        "2 CONVENIO DE COOPERACIÓN (NACIONAL / INTERNACIONAL)");
+
+        // Número y texto separados, con tildes; "COMISION" del Excel corregida.
+        assertThat(clase(AmbitoClase.CONTRATO, 23).getNombre()).isEqualTo("PRESTACIÓN DE SERVICIOS");
+        assertThat(clase(AmbitoClase.CONTRATO, 23).getEtiqueta()).isEqualTo("23 PRESTACIÓN DE SERVICIOS");
+        assertThat(clase(AmbitoClase.CONTRATO, 4).getNombre()).isEqualTo("COMISIÓN");
+        assertThat(clase(AmbitoClase.CONTRATO, 2).getNombre()).isEqualTo("ARRENDAMIENTO y/o ADQUISICIÓN DE INMUEBLES");
+        assertThat(clases.findAll()).allSatisfy(c -> assertThat(c.getNombre()).doesNotMatch("^\\d.*"));
+
+        // Solo "30 OTROS" de contratos es esOtros.
+        assertThat(clases.findAll().stream().filter(ClaseContratoEntity::esOtros).map(ClaseContratoEntity::getEtiqueta))
+                .containsExactly("30 OTROS");
+
+        // 99999998 no es una clase.
+        assertThat(clases.findAll()).noneMatch(c -> c.getCodigoSireci() == 99_999_998);
+    }
+
+    @Test
+    @Order(8)
+    void volverACargarNoDuplicaNiReactivaClases() {
+        ClaseContratoEntity factoring = clase(AmbitoClase.CONTRATO, 13);
+        factoring.setActivo(false);
+        clases.save(factoring);
+
+        volverACargarDataSql();
+
+        assertThat(clases.count()).isEqualTo(32);
+        assertThat(clase(AmbitoClase.CONTRATO, 13).getActivo()).as("no se reactiva").isFalse();
     }
 }

@@ -70,3 +70,44 @@ INSERT IGNORE INTO consecutivo (serie_id, anio, ultimo_numero, creado_en, actual
     (13, 2026, 0,   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     (14, 2026, 0,   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     (15, 2026, 0,   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- =============================================================================================
+-- Clases de contrato SIRECI. Fuente: hoja CONTROL, columna A: filas 290 a 319 (30 clases de
+-- contrato) y filas 322 y 323 (clases de convenio, que reinician su numeración en 1).
+-- Número y texto separados al cargar. Única corrección al texto del Excel: "COMISION" → "COMISIÓN".
+-- El código 99999998 ("no se diligencia información en este período", fila 320) NO es una clase:
+-- pertenece al reporte SIRECI y no se carga aquí.
+-- =============================================================================================
+INSERT IGNORE INTO clase_contrato (id, codigo_sireci, nombre, ambito, activo, creado_en, actualizado_en) VALUES
+    (1 , 1 , 'AGENCIA',                                            'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (2 , 2 , 'ARRENDAMIENTO y/o ADQUISICIÓN DE INMUEBLES',         'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (3 , 3 , 'CESIÓN DE CRÉDITOS',                                 'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (4 , 4 , 'COMISIÓN',                                           'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (5 , 5 , 'COMODATO',                                           'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (6 , 6 , 'COMPRAVENTA MERCANTIL',                              'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (7 , 7 , 'COMPRAVENTA y/o SUMINISTRO',                         'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (8 , 8 , 'CONCESIÓN',                                          'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (9 , 9 , 'CONSULTORÍA',                                        'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (10, 10, 'CONTRATOS DE ACTIVIDAD CIENTÍFICA Y TECNOLÓGICA',    'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (11, 11, 'CONTRATOS DE ESTABILIDAD JURÍDICA',                  'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (12, 12, 'DEPÓSITO',                                           'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (13, 13, 'FACTORING',                                          'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (14, 14, 'FIDUCIA y/o ENCARGO FIDUCIARIO',                     'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (15, 15, 'FLETAMENTO',                                         'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (16, 16, 'FRANQUICIA',                                         'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (17, 17, 'INTERVENTORÍA',                                      'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (18, 18, 'LEASING',                                            'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (19, 19, 'MANTENIMIENTO y/o REPARACIÓN',                       'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (20, 20, 'MEDIACIÓN o MANDATO',                                'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (21, 21, 'OBRA PÚBLICA',                                       'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (22, 22, 'PERMUTA',                                            'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (23, 23, 'PRESTACIÓN DE SERVICIOS',                            'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (24, 24, 'PRESTACIÓN DE SERVICIOS DE SALUD',                   'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (25, 25, 'PRÉSTAMO o MUTUO',                                   'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (26, 26, 'PUBLICIDAD',                                         'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (27, 27, 'RENTING',                                            'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (28, 28, 'SEGUROS',                                            'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (29, 29, 'TRANSPORTE',                                         'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (30, 30, 'OTROS',                                              'CONTRATO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (31, 1 , 'CONTRATO / CONVENIO INTERADMINISTRATIVO',            'CONVENIO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (32, 2 , 'CONVENIO DE COOPERACIÓN (NACIONAL / INTERNACIONAL)', 'CONVENIO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

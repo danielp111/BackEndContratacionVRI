@@ -7,7 +7,7 @@ Backend del sistema de contratación directa de la Vicerrectoría de Investigaci
 - **Lenguaje**: Java, JDK 17.
 - **Framework**: Spring Boot 3.x (paquetes `jakarta.*`).
 - **Build**: Maven (`pom.xml`).
-- **Base de datos**: MySQL.
+- **Base de datos**: MySQL 8.4, `utf8mb4` con collation **`utf8mb4_0900_ai_ci`** (sin distinguir mayúsculas ni tildes) en el servidor, la base, todas las tablas y la conexión (`connectionCollation` en la URL JDBC). Todas las tablas deben usar la misma: mezclar collations produce "Illegal mix of collations". Ojo: esta collation es NO PAD (`'OPS'` y `'OPS '` son distintos); por eso los textos se recortan antes de guardar.
 - **API**: servicios REST con JSON, consumidos por el frontend en Angular.
 
 Comandos habituales:
@@ -98,7 +98,7 @@ Estados (guardarlos explícitamente; hoy se deducen de las fechas):
 - Recursos de contrato o convenio interadministrativo = SI exige NIT y DV de la entidad; NO los deja vacíos.
 - Persona natural no puede tener tipo de documento NIT. NIT exige número y DV; cédula o RUT exige número de cédula; cédula de extranjería exige su número. Igual para supervisor e interventor.
 - Tipo de seguimiento "Supervisor" exige supervisor; "Interventor" exige interventor; "Interventor y Supervisor" exige ambos.
-- Clase "30 OTROS" exige describir la otra clase; cualquier otra clase la deja vacía.
+- Clase "30 OTROS" exige describir la otra clase; cualquier otra clase la deja vacía. Se decide con `ClaseContratoEntity.esOtros()` (código 30 en el ámbito CONTRATO), no comparando textos.
 - Anticipo "No pactados" exige valor 0; "Anticipo" o "Pago anticipado" exige valor.
 - Adición en valor exige valor; en tiempo exige días; en valor y tiempo exige ambos.
 - Fecha de terminación exige fecha de inicio; inicio exige suscripción; acta final exige terminación.
@@ -160,14 +160,21 @@ Convenciones del modelo:
 
 **Carga inicial.** `src/main/resources/data.sql` carga las 15 series, los 17 tipos y el consecutivo 2026 de cada serie con el último número usado según la hoja CONTROL (fila 3, CANTIDAD): OPS 108, Suministro 15, `6.1-17.3` 1, Consultoría 1, Compraventa 3 y el resto 0. Corre en cada arranque (`spring.sql.init.mode=always`, `spring.jpa.defer-datasource-initialization=true`) y es idempotente: `INSERT IGNORE` con ids fijos, así nunca sobrescribe un consecutivo que avanzó ni recrea un tipo renombrado o reactiva uno inactivado. **Antes de producción** pasar a Flyway y dejar `ddl-auto=validate`.
 
-**`clase_contrato`**: clases oficiales SIRECI.
+**`clase_contrato`**: clases oficiales SIRECI de contratos y de convenios (dominio `clasecontrato`).
 
 | Campo | Tipo | Llave / regla |
 |---|---|---|
 | id | BIGINT | PK |
-| codigo_sireci | SMALLINT | Único (1 a 30, más las de convenio) |
-| nombre | VARCHAR(120) | |
-| activo | BOOLEAN | |
+| codigo_sireci | INT | Código oficial de la Contraloría, positivo. No se puede cambiar después de crear |
+| nombre | VARCHAR(120) | Texto oficial con tildes (mayúsculas como en el SIRECI), tal como se escribe |
+| ambito | VARCHAR(10) | CONTRATO o CONVENIO. No se puede cambiar después de crear |
+| activo | BOOLEAN | Inactiva: no se ofrece para contratos nuevos; los que ya la tienen la conservan |
+
+- Único por (ambito, codigo_sireci) (`uk_clase_contrato_ambito_codigo`): las clases de convenio reinician su numeración en 1.
+- `ClaseContratoEntity.esOtros()`: verdadero solo para el código 30 en el ámbito CONTRATO ("30 OTROS"). La API lo devuelve como `esOtros`, junto con `codigoSireci`, `nombre` y `etiqueta` ("23 PRESTACIÓN DE SERVICIOS").
+- El código **99999998** ("no se diligencia información para este formulario en este período") **no es una clase**: pertenece al reporte SIRECI. Crearlo responde 400 y no está en la carga inicial.
+- Carga inicial (`data.sql`, ids 1 a 32): las 30 clases de contrato de la hoja CONTROL (columna A, filas 290 a 319) y las 2 de convenio (filas 322 y 323: "1 CONTRATO / CONVENIO INTERADMINISTRATIVO" y "2 CONVENIO DE COOPERACIÓN (NACIONAL / INTERNACIONAL)"), con número y texto separados. Única corrección al texto del Excel: "COMISION" → "COMISIÓN".
+- El dominio de contratos valida la clase con `IClaseContratoServicio.obtenerClaseValida(id, actual)` (debe estar activa si cambia).
 
 **`catalogo_item`**: listas cortas en una sola tabla.
 
@@ -195,7 +202,7 @@ Convenciones del modelo:
 | celular | VARCHAR(20) | |
 | activo | BOOLEAN | |
 
-El NIT se reconoce por el código SIRECI del tipo de identificación, configurado en `vri.tipo-identificacion.codigo-nit` (hoy `1`, **por confirmar con la VRI**). Persona natural no admite NIT.
+El NIT se reconoce por el código SIRECI del tipo de identificación, configurado en `vri.tipo-identificacion.codigo-nit` (`1`, confirmado por la lista "TIPO DE DOCUMENTO" de la hoja CONTROL: "1 NIT"). Persona natural no admite NIT.
 
 **`persona_natural`**: nombres VARCHAR(100) y apellidos VARCHAR(100) obligatorios; fecha_nacimiento DATE (pasada; la edad se calcula), ciudad_nacimiento VARCHAR(80), fecha_expedicion DATE (no anterior al nacimiento), lugar_expedicion VARCHAR(80), profesion VARCHAR(120), tarjeta_profesional VARCHAR(40), entidad_tarjeta VARCHAR(120), correo_institucional VARCHAR(120).
 
@@ -290,7 +297,7 @@ El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 | responsable_id | BIGINT | FK `abogado` |
 | fecha_registro | DATETIME | |
 | clase_contrato_id | BIGINT | FK `clase_contrato` |
-| otra_clase | VARCHAR(150) | Obligatoria solo si la clase es 30 OTROS |
+| otra_clase | VARCHAR(150) | Obligatoria solo si la clase es 30 OTROS (`esOtros()`); vacía en cualquier otra |
 | objeto | VARCHAR(390) | Obligatorio |
 | contratista_id | BIGINT | FK `tercero` |
 | ordenador_id | BIGINT | FK `ordenador_gasto` |
@@ -429,7 +436,7 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto` y `tipocontrato` (series documentales, tipos de contrato y consecutivos). Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos) y `clasecontrato` (clases SIRECI). Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -453,6 +460,7 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Personas naturales asignadas (representante legal, director, y luego supervisor o contratista): validar con `ITerceroServicio.obtenerPersonaNaturalValida(id, actual, rol)`.
 - Terceros: `POST/PUT /api/terceros/naturales[/{id}]` y `/api/terceros/juridicas[/{id}]` con DTOs distintos; `GET /api/terceros/{id}` devuelve la forma según la naturaleza; `GET /api/terceros?documento=&nombre=&naturaleza=&activo=&pagina=&tamanio=`.
 - Tipos de contrato (dominio `tipocontrato`): `GET/POST /api/series-documentales`, `GET/PUT /api/series-documentales/{id}`, `PATCH /{id}/estado`, `GET /api/series-documentales/{id}/consecutivos/{anio}` (último número y siguiente; 0 si no hay números, no 404); `GET/POST /api/tipos-contrato?activo=&serieId=`, `GET/PUT /api/tipos-contrato/{id}`, `PATCH /{id}/estado` y `GET /api/tipos-contrato/activos` para selectores (tipo activo con serie activa). `generarNumero` no tiene endpoint: lo usa el dominio de contratos.
+- Clases de contrato SIRECI: `GET /api/clases-contrato?ambito=&activo=` (con `activo=true` para selectores; orden por ámbito y código), `GET/PUT /api/clases-contrato/{id}` (PUT solo cambia el nombre; un código o ámbito distinto en el cuerpo da 400), `POST /api/clases-contrato` y `PATCH /{id}/estado`.
 - Errores HTTP: 400 (validación o regla de negocio), 404 (no existe), 409 (duplicado), 415 (cuerpo que no es `application/json`).
 - No hay borrado físico de maestros: se usa `PATCH /{id}/estado?activo=`.
 - MySQL local: `docker compose up -d` (MySQL 8.4 en el puerto 3306, base `contratacion_vri`). Las pruebas usan H2 en memoria y no necesitan Docker.
