@@ -1,0 +1,639 @@
+{
+  "info": {
+    "name": "Contratación VRI - Clases de contrato SIRECI",
+    "description": "Pruebas del catálogo de clases de contrato y de convenio del SIRECI. Ejecutar COMPLETA y EN ORDEN con el Collection Runner o con newman: cada petición usa los datos que guardó la anterior.\n\nLa carpeta 00 genera un código de prueba único por ejecución y verifica la carga inicial (data.sql): las 30 clases de contrato, las 2 de convenio y \"30 OTROS\".\n\nCada ejecución crea 2 clases de prueba (una de contrato y una de convenio con el mismo código) y al final las deja INACTIVAS, para que no aparezcan en los selectores.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "sufijo", "value": "" },
+    { "key": "codigo", "value": "" },
+    { "key": "otrosId", "value": "" },
+    { "key": "claseId", "value": "" },
+    { "key": "claseConvenioId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Verificar las 30 clases de contrato de la carga inicial",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Código de prueba único por ejecución: 5 + 6 dígitos (cabe en un INT y no es 99999998).",
+                  "const sufijo = Date.now().toString().slice(-6);",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('codigo', '5' + sufijo);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "const codigos = lista.map(c => c.codigoSireci);",
+                  "pm.test('Trae los códigos 1 a 30', () => {",
+                  "    for (let i = 1; i <= 30; i++) { pm.expect(codigos).to.include(i); }",
+                  "});",
+                  "pm.test('Todas son del ámbito CONTRATO', () => pm.expect(lista.every(c => c.ambito === 'CONTRATO')).to.be.true);",
+                  "pm.test('Número y texto separados, con tildes', () => {",
+                  "    const c23 = lista.find(c => c.codigoSireci === 23);",
+                  "    pm.expect(c23.nombre).to.eql('PRESTACIÓN DE SERVICIOS');",
+                  "    pm.expect(c23.etiqueta).to.eql('23 PRESTACIÓN DE SERVICIOS');",
+                  "});",
+                  "pm.test('COMISIÓN corregida', () => pm.expect(lista.find(c => c.codigoSireci === 4).nombre).to.eql('COMISIÓN'));",
+                  "pm.test('Solo \"30 OTROS\" es esOtros', () => {",
+                  "    const otros = lista.filter(c => c.esOtros);",
+                  "    pm.expect(otros.map(c => c.etiqueta)).to.eql(['30 OTROS']);",
+                  "    pm.collectionVariables.set('otrosId', otros[0].id);",
+                  "});",
+                  "pm.test('No incluye 99999998', () => pm.expect(codigos).to.not.include(99999998));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clases-contrato?ambito=CONTRATO",
+              "host": ["{{baseUrl}}"],
+              "path": ["clases-contrato"],
+              "query": [{ "key": "ambito", "value": "CONTRATO" }]
+            }
+          }
+        },
+        {
+          "name": "Verificar las 2 clases de convenio de la carga inicial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const etiquetas = pm.response.json().map(c => c.etiqueta);",
+                  "pm.test('Los convenios reinician en 1', () => {",
+                  "    pm.expect(etiquetas).to.include('1 CONTRATO / CONVENIO INTERADMINISTRATIVO');",
+                  "    pm.expect(etiquetas).to.include('2 CONVENIO DE COOPERACIÓN (NACIONAL / INTERNACIONAL)');",
+                  "});",
+                  "pm.test('Ninguna de convenio es esOtros', () => pm.expect(pm.response.json().some(c => c.esOtros)).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clases-contrato?ambito=CONVENIO",
+              "host": ["{{baseUrl}}"],
+              "path": ["clases-contrato"],
+              "query": [{ "key": "ambito", "value": "CONVENIO" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Crear",
+      "item": [
+        {
+          "name": "1.1 Crear clase de contrato (código y nombre separados, etiqueta)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created con Location', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.response.to.have.header('Location');",
+                  "});",
+                  "const c = pm.response.json();",
+                  "const codigo = Number(pm.collectionVariables.get('codigo'));",
+                  "const nombre = 'CLASE DE PRUEBA S' + pm.collectionVariables.get('sufijo');",
+                  "pm.test('Código y nombre por separado, nombre normalizado', () => {",
+                  "    pm.expect(c.codigoSireci).to.eql(codigo);",
+                  "    pm.expect(c.nombre).to.eql(nombre);",
+                  "});",
+                  "pm.test('Etiqueta \"código nombre\"', () => pm.expect(c.etiqueta).to.eql(codigo + ' ' + nombre));",
+                  "pm.test('Ámbito CONTRATO, activa y no es OTROS', () => {",
+                  "    pm.expect(c.ambito).to.eql('CONTRATO');",
+                  "    pm.expect(c.activo).to.be.true;",
+                  "    pm.expect(c.esOtros).to.be.false;",
+                  "});",
+                  "pm.collectionVariables.set('claseId', c.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigoSireci\": {{codigo}},\n  \"nombre\": \"  CLASE   DE PRUEBA S{{sufijo}} \",\n  \"ambito\": \"CONTRATO\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato"
+          }
+        },
+        {
+          "name": "1.2 El mismo código en el ámbito CONVENIO sí se permite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const c = pm.response.json();",
+                  "pm.test('Mismo código, otro ámbito', () => {",
+                  "    pm.expect(c.codigoSireci).to.eql(Number(pm.collectionVariables.get('codigo')));",
+                  "    pm.expect(c.ambito).to.eql('CONVENIO');",
+                  "});",
+                  "pm.collectionVariables.set('claseConvenioId', c.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigoSireci\": {{codigo}},\n  \"nombre\": \"CONVENIO DE PRUEBA S{{sufijo}}\",\n  \"ambito\": \"CONVENIO\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato"
+          }
+        },
+        {
+          "name": "1.3 Rechazar código repetido en el mismo ámbito (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "const e = pm.response.json();",
+                  "pm.test('Código GC-0002', () => pm.expect(e.codigoError).to.eql('GC-0002'));",
+                  "pm.test('Nombra el código y el ámbito', () => pm.expect(e.mensaje).to.eql('Ya existe la clase ' + pm.collectionVariables.get('codigo') + ' en el ámbito CONTRATO'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigoSireci\": {{codigo}},\n  \"nombre\": \"OTRO NOMBRE\",\n  \"ambito\": \"CONTRATO\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato"
+          }
+        },
+        {
+          "name": "1.4 Rechazar el código 99999998, que no es una clase (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Regla de negocio GC-0004', () => pm.expect(e.codigoError).to.eql('GC-0004'));",
+                  "pm.test('Explica que pertenece al reporte SIRECI', () => pm.expect(e.mensaje).to.include('pertenece al reporte SIRECI'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigoSireci\": 99999998,\n  \"nombre\": \"NO SE DILIGENCIA INFORMACIÓN PARA ESTE FORMULARIO EN ESTE PERÍODO DE REPORTE\",\n  \"ambito\": \"CONTRATO\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato"
+          }
+        },
+        {
+          "name": "1.5 Rechazar campos inválidos (400 con detalle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Datos inválidos GC-0005', () => pm.expect(e.codigoError).to.eql('GC-0005'));",
+                  "pm.test('Detalla cada campo', () => {",
+                  "    pm.expect(e.errores.codigoSireci).to.eql('El código SIRECI debe ser un número positivo');",
+                  "    pm.expect(e.errores.nombre).to.eql('El nombre de la clase es obligatorio');",
+                  "    pm.expect(e.errores.ambito).to.eql('El ámbito es obligatorio (CONTRATO o CONVENIO)');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigoSireci\": 0,\n  \"nombre\": \"\",\n  \"ambito\": null\n}" },
+            "url": "{{baseUrl}}/clases-contrato"
+          }
+        },
+        {
+          "name": "1.6 Rechazar un ámbito que no existe (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('JSON no legible GC-0006', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0006'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigoSireci\": 5,\n  \"nombre\": \"X\",\n  \"ambito\": \"ACUERDO\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Consultar",
+      "item": [
+        {
+          "name": "2.1 \"30 OTROS\" es esOtros",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "pm.test('esOtros = true', () => {",
+                  "    pm.expect(c.esOtros).to.be.true;",
+                  "    pm.expect(c.etiqueta).to.eql('30 OTROS');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/clases-contrato/{{otrosId}}" }
+        },
+        {
+          "name": "2.2 Una clase cualquiera no es esOtros",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('esOtros = false', () => pm.expect(pm.response.json().esOtros).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/clases-contrato/{{claseId}}" }
+        },
+        {
+          "name": "2.3 Consultar clase inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código GC-0003', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0003'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/clases-contrato/999999999" }
+        }
+      ]
+    },
+    {
+      "name": "03 Actualizar",
+      "item": [
+        {
+          "name": "3.1 Actualizar solo el nombre",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "const codigo = Number(pm.collectionVariables.get('codigo'));",
+                  "const nombre = 'CLASE DE PRUEBA ACTUALIZADA S' + pm.collectionVariables.get('sufijo');",
+                  "pm.test('Cambia el nombre y la etiqueta', () => {",
+                  "    pm.expect(c.nombre).to.eql(nombre);",
+                  "    pm.expect(c.etiqueta).to.eql(codigo + ' ' + nombre);",
+                  "});",
+                  "pm.test('Conserva código y ámbito', () => {",
+                  "    pm.expect(c.codigoSireci).to.eql(codigo);",
+                  "    pm.expect(c.ambito).to.eql('CONTRATO');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"CLASE DE PRUEBA ACTUALIZADA S{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato/{{claseId}}"
+          }
+        },
+        {
+          "name": "3.2 Rechazar cambiar el código (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que el código no cambia', () => pm.expect(pm.response.json().mensaje).to.include('El código SIRECI de una clase no se puede cambiar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"CLASE DE PRUEBA ACTUALIZADA S{{sufijo}}\",\n  \"codigoSireci\": 6{{sufijo}}\n}" },
+            "url": "{{baseUrl}}/clases-contrato/{{claseId}}"
+          }
+        },
+        {
+          "name": "3.3 Rechazar cambiar el ámbito (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que el ámbito no cambia', () => pm.expect(pm.response.json().mensaje).to.include('El ámbito de una clase no se puede cambiar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"CLASE DE PRUEBA ACTUALIZADA S{{sufijo}}\",\n  \"ambito\": \"CONVENIO\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato/{{claseId}}"
+          }
+        },
+        {
+          "name": "3.4 Aceptar el mismo código y ámbito en el cuerpo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Aplica el nombre', () => pm.expect(pm.response.json().nombre).to.eql('CLASE DE PRUEBA S' + pm.collectionVariables.get('sufijo')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"CLASE DE PRUEBA S{{sufijo}}\",\n  \"codigoSireci\": {{codigo}},\n  \"ambito\": \"CONTRATO\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato/{{claseId}}"
+          }
+        },
+        {
+          "name": "3.5 Actualizar clase inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"NO EXISTE\"\n}" },
+            "url": "{{baseUrl}}/clases-contrato/999999999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Estado y filtros",
+      "item": [
+        {
+          "name": "4.1 Inactivar la clase de contrato de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactiva', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clases-contrato/{{claseId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["clases-contrato", "{{claseId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.2 El selector (activas de contrato) ya no la ofrece",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('Excluye la clase inactiva', () => pm.expect(lista.map(c => c.id)).to.not.include(Number(pm.collectionVariables.get('claseId'))));",
+                  "pm.test('Solo trae activas de contrato', () => pm.expect(lista.every(c => c.activo && c.ambito === 'CONTRATO')).to.be.true);",
+                  "pm.test('Sigue ofreciendo 23 PRESTACIÓN DE SERVICIOS', () => pm.expect(lista.map(c => c.etiqueta)).to.include('23 PRESTACIÓN DE SERVICIOS'));",
+                  "pm.test('Ordenadas por código', () => {",
+                  "    const codigos = lista.map(c => c.codigoSireci);",
+                  "    pm.expect(codigos).to.eql([...codigos].sort((a, b) => a - b));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clases-contrato?ambito=CONTRATO&activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["clases-contrato"],
+              "query": [
+                { "key": "ambito", "value": "CONTRATO" },
+                { "key": "activo", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Listar clases inactivas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('Incluye la clase de prueba y solo trae inactivas', () => {",
+                  "    pm.expect(lista.map(c => c.id)).to.include(Number(pm.collectionVariables.get('claseId')));",
+                  "    pm.expect(lista.every(c => c.activo === false)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clases-contrato?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["clases-contrato"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.4 Reactivar la clase de contrato de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a estar activa', () => pm.expect(pm.response.json().activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clases-contrato/{{claseId}}/estado?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["clases-contrato", "{{claseId}}", "estado"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "4.5 Rechazar cuerpo que no es JSON (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 415 Unsupported Media Type', () => pm.response.to.have.status(415));",
+                  "pm.test('Código GC-0010', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0010'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "text/plain" }],
+            "body": { "mode": "raw", "raw": "23 PRESTACIÓN DE SERVICIOS" },
+            "url": "{{baseUrl}}/clases-contrato"
+          }
+        }
+      ]
+    },
+    {
+      "name": "99 Limpieza",
+      "item": [
+        {
+          "name": "Inactivar la clase de contrato de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactiva (no aparece en selectores)', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clases-contrato/{{claseId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["clases-contrato", "{{claseId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "Inactivar la clase de convenio de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactiva (no aparece en selectores)', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clases-contrato/{{claseConvenioId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["clases-contrato", "{{claseConvenioId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

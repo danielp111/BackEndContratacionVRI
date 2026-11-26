@@ -11,6 +11,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import co.edu.unicauca.contratacionvri.abogado.accesoADatos.repositorios.AbogadoRepositorio;
+import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.AmbitoClase;
+import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.ClaseContratoEntity;
+import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.repositorios.ClaseContratoRepositorio;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoItemRepositorio;
@@ -63,6 +66,9 @@ public abstract class PruebaIntegracionBase {
     protected ProyectoRepositorio proyectoRepositorio;
 
     @Autowired
+    protected ClaseContratoRepositorio claseContratoRepositorio;
+
+    @Autowired
     protected ConsecutivoRepositorio consecutivoRepositorio;
 
     @Autowired
@@ -78,6 +84,7 @@ public abstract class PruebaIntegracionBase {
     void limpiarBase() {
         // Primero las tablas que referencian a las demás: consecutivo y tipo_contrato apuntan a la serie,
         // proyecto a persona_natural (director) y las personas jurídicas a las naturales (representante).
+        claseContratoRepositorio.deleteAll();
         consecutivoRepositorio.deleteAll();
         tipoContratoRepositorio.deleteAll();
         serieRepositorio.deleteAll();
@@ -107,6 +114,10 @@ public abstract class PruebaIntegracionBase {
         i.setNombre(nombre);
         i.setActivo(true);
         return catalogoRepositorio.save(i);
+    }
+
+    protected ClaseContratoEntity clase(AmbitoClase ambito, int codigo, String nombre) {
+        return claseContratoRepositorio.save(new ClaseContratoEntity(ambito, codigo, nombre));
     }
 
     protected SerieDocumentalEntity serie(String codigo) {
