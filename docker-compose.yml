@@ -11,7 +11,9 @@ services:
       TZ: America/Bogota
     command:
       - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
+      # utf8mb4_0900_ai_ci: la de MySQL 8 (Unicode 9), sin distinguir mayúsculas ni tildes.
+      # Debe ser la misma en todas las tablas: mezclarla con otra produce "Illegal mix of collations".
+      - --collation-server=utf8mb4_0900_ai_ci
     ports:
       - "${DB_PORT:-3306}:3306"
     volumes:
