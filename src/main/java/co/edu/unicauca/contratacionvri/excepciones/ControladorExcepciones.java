@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -134,6 +135,14 @@ public class ControladorExcepciones {
     public ResponseEntity<ErrorRespuesta> manejarMetodoNoPermitido(HttpServletRequest req, HttpRequestMethodNotSupportedException ex) {
         return construir(req, HttpStatus.METHOD_NOT_ALLOWED, CodigoError.METODO_NO_PERMITIDO,
                 "El método " + ex.getMethod() + " no está permitido para esta ruta", null);
+    }
+
+    /** El cuerpo no viene como JSON (Content-Type ausente o distinto de application/json). */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorRespuesta> manejarTipoContenido(HttpServletRequest req, HttpMediaTypeNotSupportedException ex) {
+        String recibido = ex.getContentType() == null ? "ninguno" : ex.getContentType().toString();
+        return construir(req, HttpStatus.UNSUPPORTED_MEDIA_TYPE, CodigoError.TIPO_CONTENIDO_NO_SOPORTADO,
+                "El cuerpo debe enviarse como application/json (se recibió: " + recibido + ")", null);
     }
 
     /** Cualquier error no previsto: se registra completo en el log y al cliente no se le filtran detalles. */

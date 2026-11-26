@@ -15,6 +15,8 @@ import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoIte
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoItemRepositorio;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
+import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaJuridicaEntity;
+import co.edu.unicauca.contratacionvri.tercero.accesoADatos.repositorios.TerceroRepositorio;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.Rol;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.UsuarioEntity;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.repositorios.UsuarioRepositorio;
@@ -45,9 +47,16 @@ public abstract class PruebaIntegracionBase {
     @Autowired
     protected DependenciaRepositorio dependenciaRepositorio;
 
+    @Autowired
+    protected TerceroRepositorio terceroRepositorio;
+
     @BeforeEach
     void limpiarBase() {
-        // Primero las tablas que referencian a las demás.
+        // Primero las tablas que referencian a las demás. Las personas jurídicas antes que las
+        // naturales, porque pueden apuntar a ellas como representante legal.
+        terceroRepositorio.deleteAll(terceroRepositorio.findAll().stream()
+                .filter(PersonaJuridicaEntity.class::isInstance).toList());
+        terceroRepositorio.deleteAll();
         abogadoRepositorio.deleteAll();
         usuarioRepositorio.deleteAll();
         catalogoRepositorio.deleteAll();
