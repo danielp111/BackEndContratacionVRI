@@ -165,29 +165,29 @@ Convenciones del modelo:
 | nombre | VARCHAR(150) | Se muestra como "código nombre" |
 | activo | BOOLEAN | |
 
-**`tercero`**: contratistas, supervisores, interventores, ordenadores, directores de proyecto y entidades financiadoras.
+**`tercero`**: contratistas, supervisores, interventores, ordenadores, directores de proyecto y entidades financiadoras. Herencia JPA `JOINED`: los datos comunes en `tercero` y los propios en `persona_natural` o `persona_juridica` (PK = FK `tercero_id`).
 
 | Campo | Tipo | Llave / regla |
 |---|---|---|
 | id | BIGINT | PK |
+| naturaleza | VARCHAR(10) | NATURAL o JURIDICA. Columna discriminadora: no cambia después de crear el tercero |
 | tipo_identificacion_id | BIGINT | FK `catalogo_item` (TIPO_IDENTIFICACION) |
-| numero_documento | VARCHAR(20) | Único junto con el tipo |
-| dv | CHAR(1) | Calculado con el algoritmo DIAN al guardar, solo para NIT |
-| naturaleza_id | BIGINT | FK `catalogo_item` (NATURALEZA). Persona natural no admite NIT |
-| nombre_completo | VARCHAR(200) | Obligatorio |
+| numero_documento | VARCHAR(20) | Único junto con el tipo (`uk_tercero_documento`). Si es NIT: solo dígitos, sin DV |
+| dv | CHAR(1) | Calculado con el algoritmo DIAN al guardar, solo para NIT; la API no lo recibe |
+| nombre_completo | VARCHAR(200) | Lo arma el sistema: nombres + apellidos o razón social. Para buscar y mostrar |
 | correo | VARCHAR(120) | |
-| correo_institucional | VARCHAR(120) | |
 | direccion | VARCHAR(200) | |
 | telefono | VARCHAR(20) | |
-| celular_1 | VARCHAR(20) | |
-| celular_2 | VARCHAR(20) | |
-| profesion | VARCHAR(120) | |
-| tarjeta_profesional | VARCHAR(40) | |
-| entidad_tarjeta | VARCHAR(120) | |
-| fecha_nacimiento | DATE | La edad se calcula |
-| fecha_expedicion | DATE | |
-| lugar_expedicion | VARCHAR(80) | |
-| ciudad_nacimiento | VARCHAR(80) | |
+| celular | VARCHAR(20) | |
+| activo | BOOLEAN | |
+
+El NIT se reconoce por el código SIRECI del tipo de identificación, configurado en `vri.tipo-identificacion.codigo-nit` (hoy `1`, **por confirmar con la VRI**). Persona natural no admite NIT.
+
+**`persona_natural`**: nombres VARCHAR(100) y apellidos VARCHAR(100) obligatorios; fecha_nacimiento DATE (pasada; la edad se calcula), ciudad_nacimiento VARCHAR(80), fecha_expedicion DATE (no anterior al nacimiento), lugar_expedicion VARCHAR(80), profesion VARCHAR(120), tarjeta_profesional VARCHAR(40), entidad_tarjeta VARCHAR(120), correo_institucional VARCHAR(120).
+
+**`persona_juridica`**: razon_social VARCHAR(200) obligatoria; representante_legal_id BIGINT opcional, FK a `persona_natural` (la base impide que sea jurídica). Al asignarlo o cambiarlo debe existir y estar activo.
+
+El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 
 **`ordenador_gasto`**
 
@@ -413,7 +413,7 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`) y `dependencia`. Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia` y `tercero`. Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -431,7 +431,10 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Errores: `excepciones/ControladorExcepciones` devuelve siempre `ErrorRespuesta` (codigoError, mensaje, codigoHttp, url, metodo, fecha, errores por campo). Lanzar `EntidadNoExisteException` (404), `EntidadYaExisteException` (409) o `ReglaNegocioException` (400) desde los servicios.
 - Las entidades de negocio extienden `comun/accesoADatos/EntidadAuditable`, que trae `creado_en/por` y `actualizado_en/por` llenados por JPA Auditing (`configuracion/ConfiguracionAuditoria`); `*_por` queda nulo hasta que exista el login.
 - Relaciones entre dominios: el DTOPeticion recibe el id (`usuarioId`, `dependenciaId`…); el servicio la valida con el método `obtener…Valido` del servicio del otro dominio (existe, está activa, pertenece al catálogo correcto) y la asigna. ModelMapper no copia relaciones: en el TypeMap de la petición se hacen `skip` de los setters de relación. Al actualizar, solo se exige que esté activo un valor que cambia.
-- Textos: Jackson recorta espacios de todo texto al leer el JSON (`configuracion/ConfiguracionJackson`); cada servicio termina la limpieza con `comun/utilidades/Textos` (correos en minúsculas; nombres de catálogo y dependencia en mayúsculas).
+- Textos: Jackson normaliza todo texto al leer el JSON, antes de `@Valid` (`configuracion/ConfiguracionJackson`): recorta, colapsa espacios horizontales repetidos y convierte `""` en `null`. Cada servicio termina la limpieza con `comun/utilidades/Textos` (correos en minúsculas; documentos, nombres de catálogo y dependencia en mayúsculas).
+- Búsquedas paginadas: devuelven `comun/fachadaServicios/PaginaRespuesta` (contenido, pagina, tamanio, totalElementos, totalPaginas, primera, ultima), con parámetros `pagina` (desde 0) y `tamanio` (1 a 100) y orden fijo definido por el servicio. Los comodines de LIKE del usuario se escapan con `!`.
+- Terceros: `POST/PUT /api/terceros/naturales[/{id}]` y `/api/terceros/juridicas[/{id}]` con DTOs distintos; `GET /api/terceros/{id}` devuelve la forma según la naturaleza; `GET /api/terceros?documento=&nombre=&naturaleza=&activo=&pagina=&tamanio=`.
+- Errores HTTP: 400 (validación o regla de negocio), 404 (no existe), 409 (duplicado), 415 (cuerpo que no es `application/json`).
 - No hay borrado físico de maestros: se usa `PATCH /{id}/estado?activo=`.
 - MySQL local: `docker compose up -d` (MySQL 8.4 en el puerto 3306, base `contratacion_vri`). Las pruebas usan H2 en memoria y no necesitan Docker.
 

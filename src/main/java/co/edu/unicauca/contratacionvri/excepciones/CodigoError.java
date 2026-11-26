@@ -19,7 +19,8 @@ public enum CodigoError {
     PETICION_MAL_FORMADA("GC-0006", "La petición no se pudo leer"),
     CONFLICTO_DE_DATOS("GC-0007", "La operación entra en conflicto con datos existentes"),
     RECURSO_NO_ENCONTRADO("GC-0008", "La ruta solicitada no existe"),
-    METODO_NO_PERMITIDO("GC-0009", "Método HTTP no permitido para esta ruta");
+    METODO_NO_PERMITIDO("GC-0009", "Método HTTP no permitido para esta ruta"),
+    TIPO_CONTENIDO_NO_SOPORTADO("GC-0010", "Tipo de contenido no soportado");
 
     private final String codigo;
     private final String descripcion;

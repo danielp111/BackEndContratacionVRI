@@ -1,0 +1,816 @@
+{
+  "info": {
+    "name": "Contratación VRI - Terceros",
+    "description": "Pruebas de la API de terceros (personas naturales y jurídicas). Ejecutar COMPLETA y EN ORDEN con el Collection Runner o con newman: cada petición usa los ids que guardó la anterior.\n\nLa carpeta 00 prepara los datos: un sufijo único por ejecución (para no chocar con documentos ya creados), los NIT de prueba con su DV esperado calculado con el algoritmo de la DIAN, y los tipos de identificación NIT (código 1) y CÉDULA DE CIUDADANÍA (código 3). Reutiliza los tipos si ya existen.\n\nRequisito: el código SIRECI del NIT debe coincidir con vri.tipo-identificacion.codigo-nit del backend (hoy 1). Si cambia, ajuste la variable codigoNit.\n\nCada ejecución deja en la base 3 terceros de prueba.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "codigoNit", "value": "1" },
+    { "key": "sufijo", "value": "" },
+    { "key": "tipoNitId", "value": "" },
+    { "key": "tipoCedulaId", "value": "" },
+    { "key": "docNatural", "value": "" },
+    { "key": "docRepresentante", "value": "" },
+    { "key": "nitEmpresa", "value": "" },
+    { "key": "dvEmpresa", "value": "" },
+    { "key": "nitEmpresa2", "value": "" },
+    { "key": "dvEmpresa2", "value": "" },
+    { "key": "naturalId", "value": "" },
+    { "key": "representanteId", "value": "" },
+    { "key": "empresaId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Obtener (o crear) tipo NIT",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Dígito de verificación DIAN (mismo algoritmo del backend) para comprobar el DV que devuelve la API.",
+                  "function dvDian(nit) {",
+                  "    const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];",
+                  "    let suma = 0;",
+                  "    for (let i = 0; i < nit.length; i++) {",
+                  "        suma += Number(nit[nit.length - 1 - i]) * pesos[i];",
+                  "    }",
+                  "    const residuo = suma % 11;",
+                  "    return String(residuo > 1 ? 11 - residuo : residuo);",
+                  "}",
+                  "",
+                  "// Sufijo único por ejecución: documentos y nombres no chocan con ejecuciones anteriores.",
+                  "const sufijo = Date.now().toString().slice(-8);",
+                  "const nit1 = '9' + sufijo;",
+                  "const nit2 = '8' + sufijo;",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('docNatural', '1' + sufijo);",
+                  "pm.collectionVariables.set('docRepresentante', '2' + sufijo);",
+                  "pm.collectionVariables.set('nitEmpresa', nit1);",
+                  "pm.collectionVariables.set('dvEmpresa', dvDian(nit1));",
+                  "pm.collectionVariables.set('nitEmpresa2', nit2);",
+                  "pm.collectionVariables.set('dvEmpresa2', dvDian(nit2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const codigo = pm.collectionVariables.get('codigoNit');",
+                  "const nit = pm.response.json().find(i => i.codigoSireci === codigo);",
+                  "if (nit) {",
+                  "    pm.collectionVariables.set('tipoNitId', nit.id);",
+                  "} else {",
+                  "    pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/catalogo-items',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ catalogo: 'TIPO_IDENTIFICACION', codigoSireci: codigo, nombre: 'NIT' }) }",
+                  "    }, (err, res) => {",
+                  "        pm.test('Crea el tipo NIT', () => pm.expect(res.code).to.eql(201));",
+                  "        pm.collectionVariables.set('tipoNitId', res.json().id);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogo-items?catalogo=TIPO_IDENTIFICACION&activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogo-items"],
+              "query": [
+                { "key": "catalogo", "value": "TIPO_IDENTIFICACION" },
+                { "key": "activo", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Obtener (o crear) tipo CÉDULA DE CIUDADANÍA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const cedula = pm.response.json().find(i => i.codigoSireci === '3');",
+                  "if (cedula) {",
+                  "    pm.collectionVariables.set('tipoCedulaId', cedula.id);",
+                  "} else {",
+                  "    pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/catalogo-items',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ catalogo: 'TIPO_IDENTIFICACION', codigoSireci: '3', nombre: 'CÉDULA DE CIUDADANÍA' }) }",
+                  "    }, (err, res) => {",
+                  "        pm.test('Crea el tipo cédula', () => pm.expect(res.code).to.eql(201));",
+                  "        pm.collectionVariables.set('tipoCedulaId', res.json().id);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogo-items?catalogo=TIPO_IDENTIFICACION&activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogo-items"],
+              "query": [
+                { "key": "catalogo", "value": "TIPO_IDENTIFICACION" },
+                { "key": "activo", "value": "true" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Persona natural",
+      "item": [
+        {
+          "name": "1.1 Crear persona natural (normaliza textos, \"\" = null, sin DV)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created con Location', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.response.to.have.header('Location');",
+                  "});",
+                  "const t = pm.response.json();",
+                  "const sufijo = pm.collectionVariables.get('sufijo');",
+                  "pm.test('Naturaleza NATURAL y sin DV (no es NIT)', () => {",
+                  "    pm.expect(t.naturaleza).to.eql('NATURAL');",
+                  "    pm.expect(t.dv).to.be.null;",
+                  "});",
+                  "pm.test('Recorta y colapsa espacios', () => {",
+                  "    pm.expect(t.nombres).to.eql('Ana María');",
+                  "    pm.expect(t.apellidos).to.eql('Muñoz Peña T' + sufijo);",
+                  "    pm.expect(t.nombreCompleto).to.eql('Ana María Muñoz Peña T' + sufijo);",
+                  "});",
+                  "pm.test('Correos en minúsculas', () => {",
+                  "    pm.expect(t.correo).to.eql('ana.munoz@correo.com');",
+                  "    pm.expect(t.correoInstitucional).to.eql('amunoz@unicauca.edu.co');",
+                  "});",
+                  "pm.test('\"\" y espacios en campos opcionales quedan en null', () => {",
+                  "    pm.expect(t.profesion).to.be.null;",
+                  "    pm.expect(t.ciudadNacimiento).to.be.null;",
+                  "    pm.expect(t.telefono).to.be.null;",
+                  "});",
+                  "pm.collectionVariables.set('naturalId', t.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \" {{docNatural}} \",\n  \"nombres\": \"  Ana    María \",\n  \"apellidos\": \" Muñoz  Peña T{{sufijo}} \",\n  \"correo\": \" Ana.Munoz@Correo.COM \",\n  \"correoInstitucional\": \"AMunoz@Unicauca.edu.co\",\n  \"profesion\": \"\",\n  \"ciudadNacimiento\": \"   \",\n  \"telefono\": \"\",\n  \"fechaNacimiento\": \"1990-05-10\",\n  \"fechaExpedicion\": \"2008-06-01\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "1.2 Rechazar persona natural con NIT (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Regla de negocio GC-0004', () => pm.expect(e.codigoError).to.eql('GC-0004'));",
+                  "pm.test('Explica que una persona natural no puede tener NIT', () => pm.expect(e.mensaje).to.include('no puede tener tipo de documento NIT'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoNitId}},\n  \"numeroDocumento\": \"7{{sufijo}}\",\n  \"nombres\": \"Pedro\",\n  \"apellidos\": \"Con NIT\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "1.3 Rechazar documento repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('Código GC-0002', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0002'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"{{docNatural}}\",\n  \"nombres\": \"Otra\",\n  \"apellidos\": \"Persona\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "1.4 Rechazar campos obligatorios vacíos (400 con detalle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Datos inválidos GC-0005', () => pm.expect(e.codigoError).to.eql('GC-0005'));",
+                  "pm.test('Detalla cada campo', () => {",
+                  "    pm.expect(e.errores).to.have.property('numeroDocumento');",
+                  "    pm.expect(e.errores).to.have.property('nombres');",
+                  "    pm.expect(e.errores).to.have.property('correo');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"   \",\n  \"nombres\": \"\",\n  \"apellidos\": \"Sin nombre\",\n  \"correo\": \"no-es-correo\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "1.5 Rechazar expedición anterior al nacimiento (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica la regla de fechas', () => pm.expect(pm.response.json().mensaje).to.eql('La fecha de expedición del documento no puede ser anterior a la fecha de nacimiento'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"3{{sufijo}}\",\n  \"nombres\": \"Fechas\",\n  \"apellidos\": \"Invertidas\",\n  \"fechaNacimiento\": \"1990-05-10\",\n  \"fechaExpedicion\": \"1985-01-01\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Persona jurídica",
+      "item": [
+        {
+          "name": "2.1 Crear persona natural para representante legal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('representanteId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"{{docRepresentante}}\",\n  \"nombres\": \"Carlos\",\n  \"apellidos\": \"Ruiz T{{sufijo}}\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "2.2 Crear persona jurídica (calcula DV, ignora dv enviado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const t = pm.response.json();",
+                  "pm.test('Naturaleza JURIDICA aunque se envió NATURAL', () => pm.expect(t.naturaleza).to.eql('JURIDICA'));",
+                  "pm.test('DV calculado con el algoritmo DIAN (ignora el dv enviado)', () => {",
+                  "    pm.expect(t.dv).to.eql(pm.collectionVariables.get('dvEmpresa'));",
+                  "});",
+                  "pm.test('Nombre completo = razón social', () => pm.expect(t.nombreCompleto).to.eql('Empresa de Prueba T' + pm.collectionVariables.get('sufijo')));",
+                  "pm.test('Representante legal asignado con sus datos', () => {",
+                  "    pm.expect(t.representanteLegalId).to.eql(Number(pm.collectionVariables.get('representanteId')));",
+                  "    pm.expect(t.representanteLegalNombre).to.eql('Carlos Ruiz T' + pm.collectionVariables.get('sufijo'));",
+                  "    pm.expect(t.representanteLegalDocumento).to.eql(pm.collectionVariables.get('docRepresentante'));",
+                  "});",
+                  "pm.collectionVariables.set('empresaId', t.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoNitId}},\n  \"numeroDocumento\": \"{{nitEmpresa}}\",\n  \"razonSocial\": \"Empresa de Prueba T{{sufijo}}\",\n  \"representanteLegalId\": {{representanteId}},\n  \"dv\": \"X\",\n  \"naturaleza\": \"NATURAL\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/juridicas"
+          }
+        },
+        {
+          "name": "2.3 Rechazar NIT con el DV incluido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Pide el NIT sin dígito de verificación', () => pm.expect(pm.response.json().mensaje).to.include('sin el dígito de verificación'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoNitId}},\n  \"numeroDocumento\": \"{{nitEmpresa2}}-{{dvEmpresa2}}\",\n  \"razonSocial\": \"NIT con DV\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/juridicas"
+          }
+        },
+        {
+          "name": "2.4 Rechazar representante inexistente (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Dice que el representante no existe', () => pm.expect(pm.response.json().mensaje).to.include('no existe'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoNitId}},\n  \"numeroDocumento\": \"{{nitEmpresa2}}\",\n  \"razonSocial\": \"Sin representante real\",\n  \"representanteLegalId\": 999999999\n}"
+            },
+            "url": "{{baseUrl}}/terceros/juridicas"
+          }
+        },
+        {
+          "name": "2.5 Rechazar representante que es persona jurídica (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Exige persona natural', () => pm.expect(pm.response.json().mensaje).to.include('debe ser una persona natural'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoNitId}},\n  \"numeroDocumento\": \"{{nitEmpresa2}}\",\n  \"razonSocial\": \"Representada por empresa\",\n  \"representanteLegalId\": {{empresaId}}\n}"
+            },
+            "url": "{{baseUrl}}/terceros/juridicas"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Consultar y buscar",
+      "item": [
+        {
+          "name": "3.1 Consultar persona natural por id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('Trae la forma de persona natural', () => {",
+                  "    pm.expect(t.naturaleza).to.eql('NATURAL');",
+                  "    pm.expect(t).to.have.property('nombres');",
+                  "    pm.expect(t).to.not.have.property('razonSocial');",
+                  "    pm.expect(t.fechaNacimiento).to.eql('1990-05-10');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/terceros/{{naturalId}}" }
+        },
+        {
+          "name": "3.2 Consultar persona jurídica por id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('Trae la forma de persona jurídica', () => {",
+                  "    pm.expect(t.naturaleza).to.eql('JURIDICA');",
+                  "    pm.expect(t).to.have.property('razonSocial');",
+                  "    pm.expect(t).to.not.have.property('nombres');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/terceros/{{empresaId}}" }
+        },
+        {
+          "name": "3.3 Consultar id inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código GC-0003', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0003'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/terceros/999999999" }
+        },
+        {
+          "name": "3.4 Buscar por prefijo de documento",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Encuentra solo la persona natural de esta ejecución', () => {",
+                  "    pm.expect(p.totalElementos).to.eql(1);",
+                  "    pm.expect(p.contenido[0].id).to.eql(Number(pm.collectionVariables.get('naturalId')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/terceros?documento={{docNatural}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["terceros"],
+              "query": [{ "key": "documento", "value": "{{docNatural}}" }]
+            }
+          }
+        },
+        {
+          "name": "3.5 Buscar por nombre (sin mayúsculas ni tildes) y paginar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "const sufijo = pm.collectionVariables.get('sufijo');",
+                  "pm.test('Encuentra las 2 personas naturales de esta ejecución', () => pm.expect(p.totalElementos).to.eql(2));",
+                  "pm.test('Pagina de a 1: página 0 de 2', () => {",
+                  "    pm.expect(p.contenido.length).to.eql(1);",
+                  "    pm.expect(p.pagina).to.eql(0);",
+                  "    pm.expect(p.tamanio).to.eql(1);",
+                  "    pm.expect(p.totalPaginas).to.eql(2);",
+                  "    pm.expect(p.primera).to.be.true;",
+                  "    pm.expect(p.ultima).to.be.false;",
+                  "});",
+                  "pm.test('Ordena por nombre: primero Ana María', () => pm.expect(p.contenido[0].nombreCompleto).to.eql('Ana María Muñoz Peña T' + sufijo));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/terceros?nombre=t{{sufijo}}&naturaleza=NATURAL&pagina=0&tamanio=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["terceros"],
+              "query": [
+                { "key": "nombre", "value": "t{{sufijo}}" },
+                { "key": "naturaleza", "value": "NATURAL" },
+                { "key": "pagina", "value": "0" },
+                { "key": "tamanio", "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.6 Buscar sin tildes: \"munoz pena\" encuentra \"Muñoz Peña\" (MySQL)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().contenido.map(t => t.id);",
+                  "pm.test('Incluye a Ana María Muñoz Peña', () => pm.expect(ids).to.include(Number(pm.collectionVariables.get('naturalId'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/terceros?nombre=munoz pena t{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["terceros"],
+              "query": [{ "key": "nombre", "value": "munoz pena t{{sufijo}}" }]
+            }
+          }
+        },
+        {
+          "name": "3.7 Rechazar tamaño de página mayor a 100 (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el límite', () => pm.expect(pm.response.json().errores.tamanio).to.eql('El tamaño máximo de página es 100'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/terceros?tamanio=101",
+              "host": ["{{baseUrl}}"],
+              "path": ["terceros"],
+              "query": [{ "key": "tamanio", "value": "101" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Actualizar",
+      "item": [
+        {
+          "name": "4.1 Actualizar persona natural (recalcula nombre completo)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('Recalcula el nombre completo', () => pm.expect(t.nombreCompleto).to.eql('Ana Lucía Muñoz Peña T' + pm.collectionVariables.get('sufijo')));",
+                  "pm.test('PUT reemplaza: lo que no se envía queda en null', () => pm.expect(t.correoInstitucional).to.be.null);",
+                  "pm.test('Conserva id y naturaleza', () => {",
+                  "    pm.expect(t.id).to.eql(Number(pm.collectionVariables.get('naturalId')));",
+                  "    pm.expect(t.naturaleza).to.eql('NATURAL');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"{{docNatural}}\",\n  \"nombres\": \"Ana Lucía\",\n  \"apellidos\": \"Muñoz Peña T{{sufijo}}\",\n  \"fechaNacimiento\": \"1990-05-10\",\n  \"profesion\": \"Abogada\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales/{{naturalId}}"
+          }
+        },
+        {
+          "name": "4.2 Rechazar cambio de naturaleza (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que la naturaleza no cambia', () => pm.expect(pm.response.json().mensaje).to.include('la naturaleza no se puede cambiar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoNitId}},\n  \"numeroDocumento\": \"{{nitEmpresa2}}\",\n  \"razonSocial\": \"Ana SAS\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/juridicas/{{naturalId}}"
+          }
+        },
+        {
+          "name": "4.3 Actualizar NIT de la jurídica (recalcula DV, quita representante)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('DV recalculado para el NIT nuevo', () => {",
+                  "    pm.expect(t.numeroDocumento).to.eql(pm.collectionVariables.get('nitEmpresa2'));",
+                  "    pm.expect(t.dv).to.eql(pm.collectionVariables.get('dvEmpresa2'));",
+                  "});",
+                  "pm.test('Sin representante legal', () => pm.expect(t.representanteLegalId).to.be.null);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoNitId}},\n  \"numeroDocumento\": \"{{nitEmpresa2}}\",\n  \"razonSocial\": \"Empresa de Prueba T{{sufijo}}\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/juridicas/{{empresaId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Estado y formato",
+      "item": [
+        {
+          "name": "5.1 Inactivar tercero",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/terceros/{{representanteId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["terceros", "{{representanteId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "5.2 Buscar inactivos de esta ejecución",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Solo el representante inactivado', () => {",
+                  "    pm.expect(p.totalElementos).to.eql(1);",
+                  "    pm.expect(p.contenido[0].id).to.eql(Number(pm.collectionVariables.get('representanteId')));",
+                  "    pm.expect(p.contenido[0].activo).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/terceros?nombre=t{{sufijo}}&activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["terceros"],
+              "query": [
+                { "key": "nombre", "value": "t{{sufijo}}" },
+                { "key": "activo", "value": "false" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.3 Rechazar representante inactivo en una empresa (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Dice que el representante está inactivo', () => pm.expect(pm.response.json().mensaje).to.include('está inactivo'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoNitId}},\n  \"numeroDocumento\": \"{{nitEmpresa2}}\",\n  \"razonSocial\": \"Empresa de Prueba T{{sufijo}}\",\n  \"representanteLegalId\": {{representanteId}}\n}"
+            },
+            "url": "{{baseUrl}}/terceros/juridicas/{{empresaId}}"
+          }
+        },
+        {
+          "name": "5.4 Rechazar cuerpo que no es JSON (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 415 Unsupported Media Type', () => pm.response.to.have.status(415));",
+                  "pm.test('Código GC-0010', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0010'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "text/plain" }],
+            "body": { "mode": "raw", "raw": "nombres=Ana" },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        }
+      ]
+    }
+  ]
+}
