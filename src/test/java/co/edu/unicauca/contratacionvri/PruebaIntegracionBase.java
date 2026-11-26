@@ -20,6 +20,8 @@ import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.Catalo
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
 import co.edu.unicauca.contratacionvri.proyecto.accesoADatos.repositorios.ProyectoRepositorio;
+import co.edu.unicauca.contratacionvri.rubro.accesoADatos.modelos.RubroEntity;
+import co.edu.unicauca.contratacionvri.rubro.accesoADatos.repositorios.RubroRepositorio;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaJuridicaEntity;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.repositorios.TerceroRepositorio;
 import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.ConsecutivoEntity;
@@ -66,6 +68,9 @@ public abstract class PruebaIntegracionBase {
     protected ProyectoRepositorio proyectoRepositorio;
 
     @Autowired
+    protected RubroRepositorio rubroRepositorio;
+
+    @Autowired
     protected ClaseContratoRepositorio claseContratoRepositorio;
 
     @Autowired
@@ -84,6 +89,7 @@ public abstract class PruebaIntegracionBase {
     void limpiarBase() {
         // Primero las tablas que referencian a las demás: consecutivo y tipo_contrato apuntan a la serie,
         // proyecto a persona_natural (director) y las personas jurídicas a las naturales (representante).
+        rubroRepositorio.deleteAll();
         claseContratoRepositorio.deleteAll();
         consecutivoRepositorio.deleteAll();
         tipoContratoRepositorio.deleteAll();
@@ -114,6 +120,14 @@ public abstract class PruebaIntegracionBase {
         i.setNombre(nombre);
         i.setActivo(true);
         return catalogoRepositorio.save(i);
+    }
+
+    protected RubroEntity rubro(String codigo, String nombre) {
+        RubroEntity r = new RubroEntity();
+        r.setCodigo(codigo);
+        r.setNombre(nombre);
+        r.setActivo(true);
+        return rubroRepositorio.save(r);
     }
 
     protected ClaseContratoEntity clase(AmbitoClase ambito, int codigo, String nombre) {

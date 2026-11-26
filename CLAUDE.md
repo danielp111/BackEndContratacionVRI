@@ -92,7 +92,7 @@ Estados (guardarlos explícitamente; hoy se deducen de las fechas):
 - Valor diario = valor final ÷ plazo total. Días ejecutados = pagos acumulados ÷ valor diario.
 - Avance físico = días ejecutados × 100 ÷ plazo total.
 - Avance presupuestal = (pagos acumulados + anticipo) × 100 ÷ valor final.
-- Dependencia de afectación: se deduce del código de rubro. Cédula y cargo del ordenador: del ordenador. Datos del contratista y supervisor: del maestro de terceros. DV: algoritmo DIAN. Edad: desde la fecha de nacimiento.
+- Dependencia de afectación: es el nombre del rubro presupuestal (`rubro_presupuestal.nombre`), no una dependencia del catálogo. Cédula y cargo del ordenador: del ordenador. Datos del contratista y supervisor: del maestro de terceros. DV: algoritmo DIAN. Edad: desde la fecha de nacimiento.
 
 ### Obligatoriedad condicional (bloquean el guardado)
 - Recursos de contrato o convenio interadministrativo = SI exige NIT y DV de la entidad; NO los deja vacíos.
@@ -232,15 +232,19 @@ El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 
 `ProyectoEntity` implementa `Persistable`: con la llave asignada a mano, `save()` haría merge y crear un código repetido sobrescribiría el proyecto existente. Así siempre inserta, y el servicio responde 409 si el código ya existe.
 
-**`rubro_presupuestal`**
+**`rubro_presupuestal`**: código de afectación presupuestal (dominio `rubro`).
 
 | Campo | Tipo | Llave / regla |
 |---|---|---|
-| codigo | VARCHAR(40) | PK (código de afectación presupuestal) |
-| nombre | VARCHAR(250) | |
-| codigo_ordenado | VARCHAR(40) | Para ordenar |
-| dependencia_id | BIGINT | FK `dependencia` (dependencia de afectación) |
-| activo | BOOLEAN | |
+| id | BIGINT | PK |
+| codigo | VARCHAR(40) | Único (`uk_rubro_presupuestal_codigo`). Texto, no número: conserva ceros a la izquierda, puntos y guiones; números y letras separados por `.` o `-`, sin espacios. No se puede cambiar si ya hay contratos que lo usan |
+| nombre | VARCHAR(300) | Obligatorio. Es la **dependencia de afectación** del contrato. Puede repetirse entre rubros |
+| activo | BOOLEAN | Inactivo: no se ofrece para contratos nuevos; los existentes lo conservan |
+
+- **El nombre del rubro es la "dependencia de afectación".** En el libro de Excel, la columna "DEPENDENCIA AFECTACIÓN PRESUPUESTAL" de cada contrato es `BUSCARV(código; CONTROL!A102:B283; 2)`, es decir, el texto del rubro (rango con nombre `Control_Dependencia_Afectacion`). No es una fila de la tabla `dependencia` (esas están en `Control_Dependencias`, CONTROL!C19:C100), por eso el rubro no tiene `dependencia_id`. Tampoco se guarda `codigo_ordenado`: la columna C del Excel es solo la lista ordenada, y el orden lo da la API.
+- Orden de los listados: por longitud del código y luego por valor (orden numérico para códigos de solo dígitos), igual que la lista ordenada del Excel: 1031 antes que 1027008.
+- "Ya hay contratos que lo usan" lo responde `UsoRubroChecker`; su implementación `UsoRubroCheckerProvisional` responde "sin contratos" hasta que exista la tabla contrato (**reemplazarla** entonces). El dominio de contratos valida el rubro con `IRubroServicio.obtenerRubroValido(id, actual)`.
+- Carga inicial (`data.sql`, ids 1 a 51): los 51 rubros de la hoja CONTROL (filas 102 a 152). El rango con nombre `Control_AfectacionPresupuestal_Depen` (A102:B283) reserva 182 filas, pero las 131 restantes están vacías y no se cargan. Los códigos venían guardados como números en el Excel (`1052002.0`, `9.011044001E9`) y se cargan como texto exacto; ninguno trae puntos, guiones ni ceros a la izquierda. Limpieza: espacios sobrantes y comillas envolventes o sueltas al final (filas 109, 111 y 115); las tildes faltantes en nombres de proyectos no se corrigen porque son nombres oficiales del sistema financiero.
 
 **`dependencia`**
 
@@ -315,7 +319,7 @@ El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 | Campo | Tipo | Llave / regla |
 |---|---|---|
 | contrato_id | BIGINT | PK y FK `contrato` |
-| rubro_codigo | VARCHAR(40) | FK `rubro_presupuestal` |
+| rubro_id | BIGINT | FK `rubro_presupuestal` (el código y la dependencia de afectación salen del rubro) |
 | proyecto_id | INT | FK `proyecto` |
 | paa | VARCHAR(40) | Código del plan anual de adquisiciones |
 | fuente_financiacion_id | BIGINT | FK `catalogo_item` (FUENTE_FINANCIACION) |
@@ -433,10 +437,11 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 - Si el sistema asigna el número automáticamente.
 - Cómo distinguir avance programado del real (hoy usan la misma fórmula).
 - Confirmar que el SIRECI es trimestral (el diccionario dice mensual).
+- Nombre completo de los rubros 9011141 y 9011044001: en el Excel ambos dicen "Servicios prestados a Empresas y", que parece truncado.
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos) y `clasecontrato` (clases SIRECI). Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos) `clasecontrato` (clases SIRECI) y `rubro` (rubros presupuestales). Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -461,6 +466,7 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Terceros: `POST/PUT /api/terceros/naturales[/{id}]` y `/api/terceros/juridicas[/{id}]` con DTOs distintos; `GET /api/terceros/{id}` devuelve la forma según la naturaleza; `GET /api/terceros?documento=&nombre=&naturaleza=&activo=&pagina=&tamanio=`.
 - Tipos de contrato (dominio `tipocontrato`): `GET/POST /api/series-documentales`, `GET/PUT /api/series-documentales/{id}`, `PATCH /{id}/estado`, `GET /api/series-documentales/{id}/consecutivos/{anio}` (último número y siguiente; 0 si no hay números, no 404); `GET/POST /api/tipos-contrato?activo=&serieId=`, `GET/PUT /api/tipos-contrato/{id}`, `PATCH /{id}/estado` y `GET /api/tipos-contrato/activos` para selectores (tipo activo con serie activa). `generarNumero` no tiene endpoint: lo usa el dominio de contratos.
 - Clases de contrato SIRECI: `GET /api/clases-contrato?ambito=&activo=` (con `activo=true` para selectores; orden por ámbito y código), `GET/PUT /api/clases-contrato/{id}` (PUT solo cambia el nombre; un código o ámbito distinto en el cuerpo da 400), `POST /api/clases-contrato` y `PATCH /{id}/estado`.
+- Rubros presupuestales: `GET /api/rubros?texto=&activo=&pagina=&tamanio=` (`texto` = prefijo del código o contenido del nombre; con `activo=true` para selectores; orden numérico por código), `GET/PUT /api/rubros/{id}` (el código no cambia si hay contratos: 400; si choca con otro: 409), `POST /api/rubros` y `PATCH /{id}/estado`. Respuesta con `codigo`, `nombre`, `etiqueta` ("1052002 - Museo de Historia Natural") y `codigoEditable`.
 - Errores HTTP: 400 (validación o regla de negocio), 404 (no existe), 409 (duplicado), 415 (cuerpo que no es `application/json`).
 - No hay borrado físico de maestros: se usa `PATCH /{id}/estado?activo=`.
 - MySQL local: `docker compose up -d` (MySQL 8.4 en el puerto 3306, base `contratacion_vri`). Las pruebas usan H2 en memoria y no necesitan Docker.

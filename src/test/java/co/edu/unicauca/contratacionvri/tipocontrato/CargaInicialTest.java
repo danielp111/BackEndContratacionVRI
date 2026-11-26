@@ -19,6 +19,8 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.AmbitoClase;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.ClaseContratoEntity;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.repositorios.ClaseContratoRepositorio;
+import co.edu.unicauca.contratacionvri.rubro.accesoADatos.modelos.RubroEntity;
+import co.edu.unicauca.contratacionvri.rubro.accesoADatos.repositorios.RubroRepositorio;
 import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.ConsecutivoEntity;
 import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.ConsecutivoId;
 import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.SerieDocumentalEntity;
@@ -53,6 +55,9 @@ class CargaInicialTest {
 
     @Autowired
     private ClaseContratoRepositorio clases;
+
+    @Autowired
+    private RubroRepositorio rubros;
 
     @Autowired
     private INumeracionServicio numeracion;
@@ -198,6 +203,54 @@ class CargaInicialTest {
 
         // 99999998 no es una clase.
         assertThat(clases.findAll()).noneMatch(c -> c.getCodigoSireci() == 99_999_998);
+    }
+
+    // ------------------------------------------------------------------ rubros presupuestales
+
+    private RubroEntity rubro(String codigo) {
+        return rubros.findAll().stream().filter(r -> r.getCodigo().equals(codigo)).findFirst().orElseThrow();
+    }
+
+    @Test
+    @Order(9)
+    void cargaLos51RubrosConElCodigoComoTextoExacto() {
+        assertThat(rubros.count()).isEqualTo(51);
+        // Venían como número en el Excel ("9.011044001E9", "1052002.0").
+        assertThat(rubro("9011044001").getNombre()).isEqualTo("Servicios prestados a Empresas y");
+        assertThat(rubro("1052002").getEtiqueta()).isEqualTo("1052002 - Museo de Historia Natural");
+        assertThat(rubros.findAll()).allSatisfy(r -> assertThat(r.getCodigo()).matches("\\d+"));
+
+        // El primero en el orden es 1031, como la lista ordenada del Excel.
+        assertThat(rubros.buscar(null, null, org.springframework.data.domain.PageRequest.of(0, 3)).getContent())
+                .extracting(RubroEntity::getCodigo).containsExactly("1031", "1027008", "1034001");
+
+        // Nombre repetido del Excel, cargado tal cual en dos rubros.
+        assertThat(rubros.findAll().stream().filter(r -> r.getNombre().equals("Servicios prestados a Empresas y")))
+                .hasSize(2);
+
+        // Limpieza: sin espacios sobrantes ni comillas envolventes o sueltas al final.
+        assertThat(rubros.findAll()).allSatisfy(r -> {
+            assertThat(r.getNombre()).isEqualTo(r.getNombre().strip()).doesNotContain("  ");
+            assertThat(r.getNombre()).doesNotStartWith("\"").doesNotEndWith("\"");
+        });
+        assertThat(rubro("4901501").getNombre()).startsWith("Propuesta de implementación");
+        assertThat(rubro("1037007").getNombre()).startsWith("CONSOLIDACION DE PROCESOS");
+        assertThat(rubro("1037008").getNombre()).endsWith("en el departamento del Cauca");
+        // La comilla de un título real se conserva (fila 137).
+        assertThat(rubro("4901477").getNombre()).contains("titulado \"econavipesca");
+    }
+
+    @Test
+    @Order(10)
+    void volverACargarNoDuplicaNiReactivaRubros() {
+        RubroEntity museo = rubro("1052002");
+        museo.setActivo(false);
+        rubros.save(museo);
+
+        volverACargarDataSql();
+
+        assertThat(rubros.count()).isEqualTo(51);
+        assertThat(rubro("1052002").getActivo()).as("no se reactiva").isFalse();
     }
 
     @Test
