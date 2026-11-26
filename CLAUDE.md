@@ -36,7 +36,7 @@ Escala de referencia (vigencia 2026, enero a marzo): 128 números asignados, 84%
 
 - **VRI**: Vicerrectoría de Investigaciones.
 - **OPS**: orden o contrato de prestación de servicios, el tipo más común.
-- **TRD**: tabla de retención documental. Cada tipo de contrato tiene una serie TRD (OPS = `6.1-17.13`, SUMINISTRO = `6.1-17.15`, COMPRAVENTA = `6.1-17.7`, CONSULTORÍA = `6.1-17.9`, APRENDIZAJE/PASANTÍA/JUDICATURA = `6.1-17.3`, convenios = `6.1-18.x`; 16 en total).
+- **TRD**: tabla de retención documental. Cada tipo de contrato pertenece a una serie documental de la TRD, y varios tipos pueden compartirla. Según la hoja CONTROL del libro hay **17 tipos y 15 series**: OPS = `6.1-17.13`, Suministro = `6.1-17.15`, Aprendizaje/Pasantía/Judicatura = `6.1-17.3` (comparten serie), Arrendamiento = `6.1-17.4`, Obra = `6.1-17.12`, Mandato = `6.1-17.11`, Consultoría = `6.1-17.9`, Comodato = `6.1-17.6`, Compraventa = `6.1-17.7`, Transporte = `6.1-17.16`, Consignación = `6.1-17.8`, Contrato interadministrativo = `6.1-17.17`, y los convenios interadministrativo, interinstitucional y marco = `6.1-18.1`, `6.1-18.2`, `6.1-18.3`. Solo las series `6.1-18.x` son de convenio.
 - **CDP**: certificado de disponibilidad presupuestal. **RP**: registro presupuestal.
 - **PAA**: plan anual de adquisiciones.
 - **Ordenador del gasto**: quien firma el contrato (casi siempre el Vicerrector de Investigaciones).
@@ -77,8 +77,10 @@ Estados (guardarlos explícitamente; hoy se deducen de las fechas):
 ## Reglas de negocio
 
 ### Numeración
-- Formato `serie_trd/NNN`, por ejemplo `6.1-17.13/023`. Consecutivo de 3 dígitos con ceros a la izquierda.
-- Un consecutivo por tipo de contrato y por año. El siguiente se asigna dentro de una transacción (bloqueo de fila sobre `consecutivo`) para que dos abogados nunca reciban el mismo número.
+- Formato `serie/NNN`, por ejemplo `6.1-17.13/023`. Consecutivo de 3 dígitos con ceros a la izquierda (desde 1000 crece a 4 dígitos en lugar de fallar).
+- Un consecutivo por **serie documental** y por año, no por tipo: los tipos que comparten serie (Aprendizaje, Pasantía y Judicatura) no repiten números entre sí.
+- El número lo asigna `INumeracionServicio.generarNumero(tipoContratoId, anio)` en la misma transacción que crea el contrato: asegura la fila (serie, año) con `INSERT … ON DUPLICATE KEY UPDATE`, la bloquea con `SELECT … FOR UPDATE`, incrementa `ultimo_numero` y devuelve `serie/NNN`. Si la transacción del contrato falla, el número no se consume. El tipo y su serie deben estar activos. Probado con llamadas concurrentes en H2 y en MySQL.
+- No usar una transacción aparte (`REQUIRES_NEW`) para crear la fila (cada petición necesitaría dos conexiones y el pool se agota con muchas peticiones simultáneas), ni `INSERT IGNORE` (toma un bloqueo compartido y produce deadlocks al pasar a `FOR UPDATE`), ni un `FOR UPDATE` sobre una fila que aún no existe (bloquea el hueco del índice en InnoDB).
 - El número es único. Un número asignado y no usado queda en estado `ANULADO`: nunca se borra ni se reutiliza.
 - Un contrato de un año anterior que sigue vivo se reporta en SIRECI con prefijo `AN25-`, `AN24-`… delante del número.
 
@@ -128,23 +130,35 @@ Convenciones del modelo:
 | anio | SMALLINT | PK |
 | abierta | BOOLEAN | Solo en vigencias abiertas se crean contratos |
 
-**`tipo_contrato`**: tipo y serie documental (OPS, SUMINISTRO…).
+**`serie_documental`**: serie de la TRD; es el prefijo del número del contrato y la unidad del consecutivo.
 
 | Campo | Tipo | Llave / regla |
 |---|---|---|
 | id | BIGINT | PK |
-| nombre | VARCHAR(80) | Obligatorio |
-| serie_trd | VARCHAR(20) | Única, ej. `6.1-17.13` |
-| es_convenio | BOOLEAN | |
-| activo | BOOLEAN | |
+| codigo | VARCHAR(20) | Único, formato TRD, ej. `6.1-17.13`. No se puede cambiar si ya hay contratos con la serie |
+| es_convenio | BOOLEAN | Lo calcula el sistema: verdadero si el código empieza por `6.1-18.`. No se recibe ni se edita |
+| activo | BOOLEAN | Inactiva: sus tipos no se ofrecen ni generan números |
 
-**`consecutivo`**: contador de números por tipo y año.
+**`tipo_contrato`**: tipo de contrato (OPS, Suministro, Pasantía…).
 
 | Campo | Tipo | Llave / regla |
 |---|---|---|
-| tipo_contrato_id | BIGINT | PK compuesta, FK `tipo_contrato` |
-| anio | SMALLINT | PK compuesta, FK `vigencia` |
-| ultimo_numero | INT | Se incrementa con bloqueo de fila (`SELECT … FOR UPDATE`) |
+| id | BIGINT | PK |
+| nombre | VARCHAR(80) | Único (sin distinguir mayúsculas). Con tildes y bien escrito, se muestra al usuario y en reportes. No se puede cambiar si ya hay contratos del tipo |
+| serie_id | BIGINT | FK `serie_documental`. Varios tipos pueden compartir serie. No se puede cambiar si ya hay contratos del tipo; al asignarla o cambiarla debe estar activa |
+| activo | BOOLEAN | Inactivo: no se ofrece para contratos nuevos ni genera números |
+
+**`consecutivo`**: último número emitido por serie y año.
+
+| Campo | Tipo | Llave / regla |
+|---|---|---|
+| serie_id | BIGINT | PK compuesta, FK `serie_documental` |
+| anio | SMALLINT | PK compuesta. Hoy se valida entre 2000 y 2100; cuando exista `vigencia`, pasa a ser FK a ella |
+| ultimo_numero | INT | Se incrementa con bloqueo de fila (`SELECT … FOR UPDATE`); ver "Numeración" |
+
+**Uso por contratos (provisional).** "Ya hay contratos que usan la serie o el tipo" lo responde la interfaz `UsoTipoContratoChecker`. Mientras no exista la tabla `contrato`, su implementación `UsoTipoContratoCheckerProvisional` considera usada una serie si ya emitió algún número en cualquier año (consecutivo > 0, incluye anulados) y responde que ningún tipo tiene contratos. **Al crear el dominio de contratos hay que reemplazarla** por una que consulte `contrato`.
+
+**Carga inicial.** `src/main/resources/data.sql` carga las 15 series, los 17 tipos y el consecutivo 2026 de cada serie con el último número usado según la hoja CONTROL (fila 3, CANTIDAD): OPS 108, Suministro 15, `6.1-17.3` 1, Consultoría 1, Compraventa 3 y el resto 0. Corre en cada arranque (`spring.sql.init.mode=always`, `spring.jpa.defer-datasource-initialization=true`) y es idempotente: `INSERT IGNORE` con ids fijos, así nunca sobrescribe un consecutivo que avanzó ni recrea un tipo renombrado o reactiva uno inactivado. **Antes de producción** pasar a Flyway y dejar `ddl-auto=validate`.
 
 **`clase_contrato`**: clases oficiales SIRECI.
 
@@ -271,7 +285,7 @@ El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 | numero | VARCHAR(30) | Único, `serie_trd/NNN`, lo genera el sistema |
 | tipo_contrato_id | BIGINT | FK `tipo_contrato` |
 | anio | SMALLINT | FK `vigencia` |
-| consecutivo | INT | Único junto con tipo y año |
+| consecutivo | INT | Único junto con la serie del tipo y el año; lo asigna `generarNumero` |
 | estado | VARCHAR(20) | EN_TRAMITE, SUSCRITO, EN_EJECUCION, TERMINADO, LIQUIDADO, ANULADO |
 | responsable_id | BIGINT | FK `abogado` |
 | fecha_registro | DATETIME | |
@@ -415,7 +429,7 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero` y `proyecto`. Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto` y `tipocontrato` (series documentales, tipos de contrato y consecutivos). Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -438,9 +452,13 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Proyectos: `POST /api/proyectos` (con `idProyecto`), `GET/PUT /api/proyectos/{idProyecto}` (un `idProyecto` distinto en el cuerpo da 400), `PATCH /{idProyecto}/estado`, `GET /api/proyectos?id=&nombre=&director=&activo=&pagina=&tamanio=` y `GET /api/proyectos/activos?texto=` para selectores. Los demás dominios validan un proyecto con `IProyectoServicio.obtenerProyectoValido(id, exigirActivo)`.
 - Personas naturales asignadas (representante legal, director, y luego supervisor o contratista): validar con `ITerceroServicio.obtenerPersonaNaturalValida(id, actual, rol)`.
 - Terceros: `POST/PUT /api/terceros/naturales[/{id}]` y `/api/terceros/juridicas[/{id}]` con DTOs distintos; `GET /api/terceros/{id}` devuelve la forma según la naturaleza; `GET /api/terceros?documento=&nombre=&naturaleza=&activo=&pagina=&tamanio=`.
+- Tipos de contrato (dominio `tipocontrato`): `GET/POST /api/series-documentales`, `GET/PUT /api/series-documentales/{id}`, `PATCH /{id}/estado`, `GET /api/series-documentales/{id}/consecutivos/{anio}` (último número y siguiente; 0 si no hay números, no 404); `GET/POST /api/tipos-contrato?activo=&serieId=`, `GET/PUT /api/tipos-contrato/{id}`, `PATCH /{id}/estado` y `GET /api/tipos-contrato/activos` para selectores (tipo activo con serie activa). `generarNumero` no tiene endpoint: lo usa el dominio de contratos.
 - Errores HTTP: 400 (validación o regla de negocio), 404 (no existe), 409 (duplicado), 415 (cuerpo que no es `application/json`).
 - No hay borrado físico de maestros: se usa `PATCH /{id}/estado?activo=`.
 - MySQL local: `docker compose up -d` (MySQL 8.4 en el puerto 3306, base `contratacion_vri`). Las pruebas usan H2 en memoria y no necesitan Docker.
+- `src/test/resources/application.properties` reemplaza por completo al de `src/main`: toda propiedad que las pruebas necesiten (p. ej. `spring.jpa.defer-datasource-initialization`) hay que repetirla ahí. Las pruebas no cargan `data.sql` (`spring.sql.init.mode=never`); `CargaInicialTest` lo prueba en su propia base H2.
+- Llaves asignadas a mano (`proyecto`, `consecutivo`): la entidad implementa `Persistable` para que crear haga INSERT y no merge (un merge sobrescribiría el registro existente).
+- Lo que dependa de bloqueos o concurrencia se prueba también contra MySQL real: H2 no reproduce los bloqueos de InnoDB. Se puede correr una prueba apuntando a una base temporal con `-Dspring.datasource.url=jdbc:mysql://…/contratacion_vri_prueba` (y usuario/clave/driver de MySQL).
 
 ## Convenciones
 

@@ -6,6 +6,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -18,6 +19,13 @@ import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.Dep
 import co.edu.unicauca.contratacionvri.proyecto.accesoADatos.repositorios.ProyectoRepositorio;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaJuridicaEntity;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.repositorios.TerceroRepositorio;
+import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.ConsecutivoEntity;
+import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.ConsecutivoId;
+import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.SerieDocumentalEntity;
+import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.TipoContratoEntity;
+import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.repositorios.ConsecutivoRepositorio;
+import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.repositorios.SerieDocumentalRepositorio;
+import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.repositorios.TipoContratoRepositorio;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.Rol;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.UsuarioEntity;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.repositorios.UsuarioRepositorio;
@@ -54,10 +62,25 @@ public abstract class PruebaIntegracionBase {
     @Autowired
     protected ProyectoRepositorio proyectoRepositorio;
 
+    @Autowired
+    protected ConsecutivoRepositorio consecutivoRepositorio;
+
+    @Autowired
+    private TransactionTemplate transaccionPruebas;
+
+    @Autowired
+    protected TipoContratoRepositorio tipoContratoRepositorio;
+
+    @Autowired
+    protected SerieDocumentalRepositorio serieRepositorio;
+
     @BeforeEach
     void limpiarBase() {
-        // Primero las tablas que referencian a las demás: proyecto apunta a persona_natural (director),
-        // y las personas jurídicas a las naturales (representante legal).
+        // Primero las tablas que referencian a las demás: consecutivo y tipo_contrato apuntan a la serie,
+        // proyecto a persona_natural (director) y las personas jurídicas a las naturales (representante).
+        consecutivoRepositorio.deleteAll();
+        tipoContratoRepositorio.deleteAll();
+        serieRepositorio.deleteAll();
         proyectoRepositorio.deleteAll();
         terceroRepositorio.deleteAll(terceroRepositorio.findAll().stream()
                 .filter(PersonaJuridicaEntity.class::isInstance).toList());
@@ -84,6 +107,35 @@ public abstract class PruebaIntegracionBase {
         i.setNombre(nombre);
         i.setActivo(true);
         return catalogoRepositorio.save(i);
+    }
+
+    protected SerieDocumentalEntity serie(String codigo) {
+        SerieDocumentalEntity s = new SerieDocumentalEntity();
+        s.setCodigo(codigo);
+        s.setActivo(true);
+        return serieRepositorio.save(s);
+    }
+
+    protected TipoContratoEntity tipoContrato(String nombre, SerieDocumentalEntity serie) {
+        TipoContratoEntity t = new TipoContratoEntity();
+        t.setNombre(nombre);
+        t.setSerie(serie);
+        t.setActivo(true);
+        return tipoContratoRepositorio.save(t);
+    }
+
+    /**
+     * Deja el consecutivo de la serie en el año con el último número indicado. Dentro de una
+     * transacción y con getReferenceById: una serie cargada fuera de la transacción llegaría
+     * "detached" y Hibernate rechazaría guardar el consecutivo.
+     */
+    protected void consecutivo(SerieDocumentalEntity serie, int anio, int ultimoNumero) {
+        transaccionPruebas.executeWithoutResult(estado -> {
+            ConsecutivoEntity c = consecutivoRepositorio.findById(new ConsecutivoId(serie.getId(), anio))
+                    .orElseGet(() -> new ConsecutivoEntity(serieRepositorio.getReferenceById(serie.getId()), anio));
+            c.setUltimoNumero(ultimoNumero);
+            consecutivoRepositorio.save(c);
+        });
     }
 
     protected DependenciaEntity dependencia(String nombre) {
