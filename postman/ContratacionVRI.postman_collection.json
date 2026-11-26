@@ -1,0 +1,314 @@
+{
+  "info": {
+    "name": "Contratación VRI - Abogados",
+    "description": "Pruebas de la API de abogados. Ejecutar en orden con el Collection Runner (o con newman). La carpeta 00 prepara los datos que necesita un abogado: un usuario nuevo con rol ABOGADO, un tipo de identificación y una dependencia (reutiliza los que ya existan). Cada ejecución crea un usuario y un abogado nuevos con un sufijo único, así que se puede correr muchas veces.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "sufijo", "value": "" },
+    { "key": "usuarioId", "value": "" },
+    { "key": "tipoIdentificacionId", "value": "" },
+    { "key": "dependenciaId", "value": "" },
+    { "key": "abogadoId", "value": "" },
+    { "key": "numeroDocumento", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Crear usuario con rol ABOGADO",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Sufijo único por ejecución para no chocar con correos y documentos ya creados.",
+                  "const sufijo = Date.now().toString().slice(-8);",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('numeroDocumento', '9' + sufijo);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const u = pm.response.json();",
+                  "pm.test('Queda con rol ABOGADO y activo', () => {",
+                  "    pm.expect(u.rol).to.eql('ABOGADO');",
+                  "    pm.expect(u.activo).to.be.true;",
+                  "});",
+                  "pm.collectionVariables.set('usuarioId', u.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"abogado{{sufijo}}@unicauca.edu.co\",\n  \"nombre\": \"Laura Muñoz\",\n  \"rol\": \"ABOGADO\"\n}"
+            },
+            "url": "{{baseUrl}}/usuarios"
+          }
+        },
+        {
+          "name": "Obtener (o crear) tipo de identificación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "if (items.length > 0) {",
+                  "    pm.collectionVariables.set('tipoIdentificacionId', items[0].id);",
+                  "} else {",
+                  "    // No hay ninguno activo: crea 3 CÉDULA DE CIUDADANÍA.",
+                  "    pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/catalogo-items',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ catalogo: 'TIPO_IDENTIFICACION', codigoSireci: '3', nombre: 'CÉDULA DE CIUDADANÍA' }) }",
+                  "    }, (err, res) => {",
+                  "        pm.test('Crea el tipo de identificación', () => pm.expect(res.code).to.eql(201));",
+                  "        pm.collectionVariables.set('tipoIdentificacionId', res.json().id);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogo-items?catalogo=TIPO_IDENTIFICACION&activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogo-items"],
+              "query": [
+                { "key": "catalogo", "value": "TIPO_IDENTIFICACION" },
+                { "key": "activo", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Obtener (o crear) dependencia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const deps = pm.response.json();",
+                  "if (deps.length > 0) {",
+                  "    pm.collectionVariables.set('dependenciaId', deps[0].id);",
+                  "} else {",
+                  "    pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/dependencias',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ nombre: 'VICERRECTORÍA DE INVESTIGACIONES' }) }",
+                  "    }, (err, res) => {",
+                  "        pm.test('Crea la dependencia', () => pm.expect(res.code).to.eql(201));",
+                  "        pm.collectionVariables.set('dependenciaId', res.json().id);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dependencias?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["dependencias"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Abogados",
+      "item": [
+        {
+          "name": "1. Crear abogado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Trae el encabezado Location', () => pm.response.to.have.header('Location'));",
+                  "const a = pm.response.json();",
+                  "pm.test('Guarda tildes y ñ correctamente', () => pm.expect(a.apellidos).to.eql('Muñoz Peña'));",
+                  "pm.test('Queda activo y con sus relaciones', () => {",
+                  "    pm.expect(a.activo).to.be.true;",
+                  "    pm.expect(a.usuarioId).to.eql(Number(pm.collectionVariables.get('usuarioId')));",
+                  "    pm.expect(a.tipoIdentificacionEtiqueta).to.be.a('string').and.not.empty;",
+                  "    pm.expect(a.dependenciaNombre).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('Normaliza el correo a minúsculas', () => pm.expect(a.correoInstitucional).to.eql('lmunoz' + pm.collectionVariables.get('sufijo') + '@unicauca.edu.co'));",
+                  "pm.collectionVariables.set('abogadoId', a.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuarioId\": {{usuarioId}},\n  \"tipoIdentificacionId\": {{tipoIdentificacionId}},\n  \"numeroDocumento\": \"{{numeroDocumento}}\",\n  \"nombres\": \"Laura\",\n  \"apellidos\": \"Muñoz Peña\",\n  \"correoInstitucional\": \"LMunoz{{sufijo}}@Unicauca.edu.co\",\n  \"telefono\": \"+57 300 123 4567\",\n  \"tarjetaProfesional\": \"123456-T\",\n  \"cargo\": \"Abogada\",\n  \"tipoVinculacion\": \"PLANTA\",\n  \"dependenciaId\": {{dependenciaId}},\n  \"fechaIngreso\": \"2024-03-01\"\n}"
+            },
+            "url": "{{baseUrl}}/abogados"
+          }
+        },
+        {
+          "name": "2. Rechazar abogado con usuario repetido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "const e = pm.response.json();",
+                  "pm.test('Devuelve el código de error GC-0002', () => pm.expect(e.codigoError).to.eql('GC-0002'));",
+                  "pm.test('Explica el motivo', () => pm.expect(e.mensaje).to.include('ya está asociado a otro abogado'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuarioId\": {{usuarioId}},\n  \"tipoIdentificacionId\": {{tipoIdentificacionId}},\n  \"numeroDocumento\": \"8{{sufijo}}\",\n  \"nombres\": \"Otro\",\n  \"apellidos\": \"Abogado\",\n  \"tipoVinculacion\": \"CONTRATISTA\"\n}"
+            },
+            "url": "{{baseUrl}}/abogados"
+          }
+        },
+        {
+          "name": "3. Listar abogados",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('Es una lista', () => pm.expect(lista).to.be.an('array'));",
+                  "pm.test('Incluye el abogado creado', () => {",
+                  "    const id = Number(pm.collectionVariables.get('abogadoId'));",
+                  "    pm.expect(lista.map(a => a.id)).to.include(id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados"
+          }
+        },
+        {
+          "name": "4. Consultar abogado por id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const a = pm.response.json();",
+                  "pm.test('Es el abogado creado', () => {",
+                  "    pm.expect(a.id).to.eql(Number(pm.collectionVariables.get('abogadoId')));",
+                  "    pm.expect(a.numeroDocumento).to.eql(pm.collectionVariables.get('numeroDocumento'));",
+                  "    pm.expect(a.fechaIngreso).to.eql('2024-03-01');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/{{abogadoId}}"
+          }
+        },
+        {
+          "name": "5. Inactivar abogado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/abogados/{{abogadoId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["abogados", "{{abogadoId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "6. Listar abogados inactivos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('Incluye el abogado inactivado', () => {",
+                  "    const id = Number(pm.collectionVariables.get('abogadoId'));",
+                  "    pm.expect(lista.map(a => a.id)).to.include(id);",
+                  "});",
+                  "pm.test('Solo trae inactivos', () => pm.expect(lista.every(a => a.activo === false)).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/abogados?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["abogados"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

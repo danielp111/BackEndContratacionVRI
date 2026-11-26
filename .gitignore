@@ -1,0 +1,16 @@
+target/
+.env
+*.log
+
+### Postman: configuración personal del workspace (puede guardar tokens). Solo se versiona la colección. ###
+.postman/
+postman/globals/
+
+### IDE ###
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath

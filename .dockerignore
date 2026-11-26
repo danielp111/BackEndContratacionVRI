@@ -1,0 +1,10 @@
+target/
+.git/
+.idea/
+.vscode/
+postman/
+*.log
+.env
+docker-compose.yml
+Dockerfile
+CLAUDE.md

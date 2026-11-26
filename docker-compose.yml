@@ -1,0 +1,45 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: contratacion-vri-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-contratacion_vri}
+      MYSQL_USER: ${DB_USER:-vri}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-vri_dev_2026}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_dev_2026}
+      TZ: America/Bogota
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_datos:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    # Docker no admite mayúsculas en nombres de imagen; en el contenedor sí.
+    image: backendcontratacion:0.0.1
+    container_name: backEndContratacion
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # Dentro de la red de compose, MySQL se llama "mysql" y escucha en 3306.
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-contratacion_vri}
+      DB_USER: ${DB_USER:-vri}
+      DB_PASSWORD: ${DB_PASSWORD:-vri_dev_2026}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+
+volumes:
+  mysql_datos:
