@@ -1,0 +1,811 @@
+{
+  "info": {
+    "name": "Contratación VRI - Tipos de contrato",
+    "description": "Pruebas del catálogo de series documentales, tipos de contrato y consecutivos. Ejecutar COMPLETA y EN ORDEN con el Collection Runner o con newman: cada petición usa los datos que guardó la anterior.\n\nLa carpeta 00 genera un sufijo único por ejecución (códigos de serie y nombres de tipo que no chocan con ejecuciones anteriores) y ubica la serie de OPS (6.1-17.13) de la carga inicial (data.sql).\n\nRequisito: la carga inicial debe estar en la base (el backend la ejecuta al arrancar).\n\nCada ejecución deja en la base 2 series y 2 tipos de prueba; al final quedan activos. La numeración (generarNumero) no tiene endpoint: se prueba en Java; aquí se consulta el consecutivo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "sufijo", "value": "" },
+    { "key": "codigoSerie", "value": "" },
+    { "key": "codigoSerieConvenio", "value": "" },
+    { "key": "codigoSerieTemporal", "value": "" },
+    { "key": "serieOpsId", "value": "" },
+    { "key": "serieId", "value": "" },
+    { "key": "serieConvenioId", "value": "" },
+    { "key": "tipo1Id", "value": "" },
+    { "key": "tipo2Id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Ubicar la serie de OPS de la carga inicial",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Sufijo único por ejecución. Los códigos cumplen el formato TRD y caben en 20 caracteres.",
+                  "const sufijo = Date.now().toString().slice(-8);",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('codigoSerie', '6.1-17.' + sufijo);",
+                  "pm.collectionVariables.set('codigoSerieConvenio', '6.1-18.' + sufijo);",
+                  "pm.collectionVariables.set('codigoSerieTemporal', '6.1-17.' + sufijo + '9');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const ops = pm.response.json().find(s => s.codigo === '6.1-17.13');",
+                  "pm.test('La carga inicial trae la serie 6.1-17.13', () => pm.expect(ops).to.exist);",
+                  "pm.test('La carga inicial trae las 15 series', () => pm.expect(pm.response.json().length).to.be.at.least(15));",
+                  "if (ops) { pm.collectionVariables.set('serieOpsId', ops.id); }"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/series-documentales" }
+        }
+      ]
+    },
+    {
+      "name": "01 Series documentales",
+      "item": [
+        {
+          "name": "1.1 Crear serie (es_convenio calculado, ignora el enviado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created con Location', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.response.to.have.header('Location');",
+                  "});",
+                  "const s = pm.response.json();",
+                  "pm.test('Recorta los espacios del código', () => pm.expect(s.codigo).to.eql(pm.collectionVariables.get('codigoSerie')));",
+                  "pm.test('6.1-17.x no es convenio aunque se envió true', () => pm.expect(s.esConvenio).to.be.false);",
+                  "pm.test('Activa y con código editable (sin números emitidos)', () => {",
+                  "    pm.expect(s.activo).to.be.true;",
+                  "    pm.expect(s.codigoEditable).to.be.true;",
+                  "});",
+                  "pm.collectionVariables.set('serieId', s.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"  {{codigoSerie}}  \",\n  \"esConvenio\": true\n}" },
+            "url": "{{baseUrl}}/series-documentales"
+          }
+        },
+        {
+          "name": "1.2 Crear serie de convenio (6.1-18.x)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const s = pm.response.json();",
+                  "pm.test('6.1-18.x es convenio aunque se envió false', () => pm.expect(s.esConvenio).to.be.true);",
+                  "pm.collectionVariables.set('serieConvenioId', s.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigoSerieConvenio}}\",\n  \"esConvenio\": false\n}" },
+            "url": "{{baseUrl}}/series-documentales"
+          }
+        },
+        {
+          "name": "1.3 Rechazar código repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "const e = pm.response.json();",
+                  "pm.test('Código GC-0002', () => pm.expect(e.codigoError).to.eql('GC-0002'));",
+                  "pm.test('Nombra la serie repetida', () => pm.expect(e.mensaje).to.eql('Ya existe la serie documental ' + pm.collectionVariables.get('codigoSerie')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigoSerie}}\"\n}" },
+            "url": "{{baseUrl}}/series-documentales"
+          }
+        },
+        {
+          "name": "1.4 Rechazar código con formato inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el formato TRD', () => pm.expect(pm.response.json().errores.codigo).to.include('6.1-17.13'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"6.1/17.13\"\n}" },
+            "url": "{{baseUrl}}/series-documentales"
+          }
+        },
+        {
+          "name": "1.5 Cambiar el código sin números emitidos (recalcula es_convenio)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "pm.test('Aplica el código nuevo', () => pm.expect(s.codigo).to.eql(pm.collectionVariables.get('codigoSerieTemporal')));",
+                  "pm.test('Al pasar a 6.1-17.x deja de ser convenio', () => pm.expect(s.esConvenio).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigoSerieTemporal}}\"\n}" },
+            "url": "{{baseUrl}}/series-documentales/{{serieConvenioId}}"
+          }
+        },
+        {
+          "name": "1.6 Devolver el código de convenio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a ser convenio', () => pm.expect(pm.response.json().esConvenio).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigoSerieConvenio}}\"\n}" },
+            "url": "{{baseUrl}}/series-documentales/{{serieConvenioId}}"
+          }
+        },
+        {
+          "name": "1.7 Rechazar cambiar al código de otra serie (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigoSerieConvenio}}\"\n}" },
+            "url": "{{baseUrl}}/series-documentales/{{serieId}}"
+          }
+        },
+        {
+          "name": "1.8 La serie de OPS tiene números emitidos: código no editable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('codigoEditable = false', () => pm.expect(pm.response.json().codigoEditable).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/series-documentales/{{serieOpsId}}" }
+        },
+        {
+          "name": "1.9 Rechazar cambiar el código de la serie de OPS (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Regla de negocio GC-0004', () => pm.expect(e.codigoError).to.eql('GC-0004'));",
+                  "pm.test('Explica que ya hay contratos numerados', () => pm.expect(e.mensaje).to.include('no se puede cambiar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"6.1-17.98\"\n}" },
+            "url": "{{baseUrl}}/series-documentales/{{serieOpsId}}"
+          }
+        },
+        {
+          "name": "1.10 Consultar serie inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código GC-0003', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0003'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/series-documentales/999999999" }
+        }
+      ]
+    },
+    {
+      "name": "02 Consecutivo",
+      "item": [
+        {
+          "name": "2.1 Consecutivo de OPS 2026 (continúa desde el Excel)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "pm.test('Último número al menos 108 (cantidad de la hoja CONTROL)', () => pm.expect(c.ultimoNumero).to.be.at.least(108));",
+                  "pm.test('El siguiente es serie/NNN con el número + 1', () => {",
+                  "    const siguiente = String(c.ultimoNumero + 1).padStart(3, '0');",
+                  "    pm.expect(c.siguienteNumero).to.eql('6.1-17.13/' + siguiente);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/series-documentales/{{serieOpsId}}/consecutivos/2026" }
+        },
+        {
+          "name": "2.2 Consecutivo de una serie sin números (0, no 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "pm.test('Último número 0 y siguiente /001', () => {",
+                  "    pm.expect(c.ultimoNumero).to.eql(0);",
+                  "    pm.expect(c.siguienteNumero).to.eql(pm.collectionVariables.get('codigoSerie') + '/001');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/series-documentales/{{serieId}}/consecutivos/2026" }
+        },
+        {
+          "name": "2.3 Rechazar año fuera de rango (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el rango', () => pm.expect(pm.response.json().errores.anio).to.eql('El año debe ser 2000 o posterior'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/series-documentales/{{serieId}}/consecutivos/1999" }
+        },
+        {
+          "name": "2.4 Consecutivo de serie inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/series-documentales/999999999/consecutivos/2026" }
+        }
+      ]
+    },
+    {
+      "name": "03 Tipos de contrato",
+      "item": [
+        {
+          "name": "3.1 Crear tipo (nombre con tildes, tal como se escribe)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const t = pm.response.json();",
+                  "pm.test('Conserva tildes y recorta espacios', () => pm.expect(t.nombre).to.eql('Práctica T' + pm.collectionVariables.get('sufijo')));",
+                  "pm.test('Trae su serie', () => {",
+                  "    pm.expect(t.serieId).to.eql(Number(pm.collectionVariables.get('serieId')));",
+                  "    pm.expect(t.serieCodigo).to.eql(pm.collectionVariables.get('codigoSerie'));",
+                  "    pm.expect(t.esConvenio).to.be.false;",
+                  "});",
+                  "pm.test('Activo y editable', () => {",
+                  "    pm.expect(t.activo).to.be.true;",
+                  "    pm.expect(t.nombreYSerieEditables).to.be.true;",
+                  "});",
+                  "pm.collectionVariables.set('tipo1Id', t.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"  Práctica   T{{sufijo}} \",\n  \"serieId\": {{serieId}}\n}" },
+            "url": "{{baseUrl}}/tipos-contrato"
+          }
+        },
+        {
+          "name": "3.2 Crear otro tipo con la misma serie",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const t = pm.response.json();",
+                  "pm.test('Comparte la serie del tipo anterior', () => pm.expect(t.serieId).to.eql(Number(pm.collectionVariables.get('serieId'))));",
+                  "pm.collectionVariables.set('tipo2Id', t.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Judicatura T{{sufijo}}\",\n  \"serieId\": {{serieId}}\n}" },
+            "url": "{{baseUrl}}/tipos-contrato"
+          }
+        },
+        {
+          "name": "3.3 Rechazar nombre repetido en mayúsculas (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('Código GC-0002', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0002'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"PRÁCTICA T{{sufijo}}\",\n  \"serieId\": {{serieConvenioId}}\n}" },
+            "url": "{{baseUrl}}/tipos-contrato"
+          }
+        },
+        {
+          "name": "3.4 Rechazar campos vacíos (400 con detalle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Detalla nombre y serie', () => {",
+                  "    pm.expect(e.errores.nombre).to.eql('El nombre del tipo de contrato es obligatorio');",
+                  "    pm.expect(e.errores.serieId).to.eql('La serie documental es obligatoria');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"\",\n  \"serieId\": null\n}" },
+            "url": "{{baseUrl}}/tipos-contrato"
+          }
+        },
+        {
+          "name": "3.5 Rechazar serie inexistente (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Dice que la serie no existe', () => pm.expect(pm.response.json().mensaje).to.eql('La serie documental con id 999999999 no existe'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Sin serie T{{sufijo}}\",\n  \"serieId\": 999999999\n}" },
+            "url": "{{baseUrl}}/tipos-contrato"
+          }
+        },
+        {
+          "name": "3.6 Listar los tipos de la serie",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().map(t => t.id);",
+                  "pm.test('Trae los 2 tipos que comparten la serie', () => {",
+                  "    pm.expect(ids).to.have.members([Number(pm.collectionVariables.get('tipo1Id')), Number(pm.collectionVariables.get('tipo2Id'))]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tipos-contrato?serieId={{serieId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tipos-contrato"],
+              "query": [{ "key": "serieId", "value": "{{serieId}}" }]
+            }
+          }
+        },
+        {
+          "name": "3.7 Actualizar nombre y pasar a la serie de convenio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('Cambia nombre y serie', () => {",
+                  "    pm.expect(t.nombre).to.eql('Práctica profesional T' + pm.collectionVariables.get('sufijo'));",
+                  "    pm.expect(t.serieId).to.eql(Number(pm.collectionVariables.get('serieConvenioId')));",
+                  "});",
+                  "pm.test('Ahora es de convenio (lo toma de su serie)', () => pm.expect(t.esConvenio).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Práctica profesional T{{sufijo}}\",\n  \"serieId\": {{serieConvenioId}}\n}" },
+            "url": "{{baseUrl}}/tipos-contrato/{{tipo1Id}}"
+          }
+        },
+        {
+          "name": "3.8 Consultar tipo inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/tipos-contrato/999999999" }
+        }
+      ]
+    },
+    {
+      "name": "04 Estado y selector",
+      "item": [
+        {
+          "name": "4.1 El selector ofrece los tipos nuevos y los de la carga inicial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "const ids = lista.map(t => t.id);",
+                  "pm.test('Incluye los 2 tipos de esta ejecución', () => {",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get('tipo1Id')));",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get('tipo2Id')));",
+                  "});",
+                  "pm.test('Incluye \"Pasantía (6.1-17.3)\" de la carga inicial', () => pm.expect(lista.map(t => t.etiqueta)).to.include('Pasantía (6.1-17.3)'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/tipos-contrato/activos" }
+        },
+        {
+          "name": "4.2 Inactivar el tipo 2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tipos-contrato/{{tipo2Id}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["tipos-contrato", "{{tipo2Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.3 Inactivar la serie de convenio (la del tipo 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactiva', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/series-documentales/{{serieConvenioId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["series-documentales", "{{serieConvenioId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.4 El selector ya no ofrece el tipo inactivo ni el de serie inactiva",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().map(t => t.id);",
+                  "pm.test('Excluye el tipo 2 (inactivo)', () => pm.expect(ids).to.not.include(Number(pm.collectionVariables.get('tipo2Id'))));",
+                  "pm.test('Excluye el tipo 1 (activo, pero su serie está inactiva)', () => pm.expect(ids).to.not.include(Number(pm.collectionVariables.get('tipo1Id'))));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/tipos-contrato/activos" }
+        },
+        {
+          "name": "4.5 Rechazar crear un tipo con la serie inactiva (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Dice que la serie está inactiva', () => pm.expect(pm.response.json().mensaje).to.eql('La serie documental ' + pm.collectionVariables.get('codigoSerieConvenio') + ' está inactiva'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Serie cerrada T{{sufijo}}\",\n  \"serieId\": {{serieConvenioId}}\n}" },
+            "url": "{{baseUrl}}/tipos-contrato"
+          }
+        },
+        {
+          "name": "4.6 Editar el tipo 1 conservando su serie inactiva sí se permite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Aplica el nombre nuevo', () => pm.expect(pm.response.json().nombre).to.eql('Práctica T' + pm.collectionVariables.get('sufijo')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Práctica T{{sufijo}}\",\n  \"serieId\": {{serieConvenioId}}\n}" },
+            "url": "{{baseUrl}}/tipos-contrato/{{tipo1Id}}"
+          }
+        },
+        {
+          "name": "4.7 Listar tipos inactivos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "pm.test('Incluye el tipo 2 y solo trae inactivos', () => {",
+                  "    pm.expect(lista.map(t => t.id)).to.include(Number(pm.collectionVariables.get('tipo2Id')));",
+                  "    pm.expect(lista.every(t => t.activo === false)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tipos-contrato?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["tipos-contrato"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.8 Reactivar la serie de convenio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a estar activa', () => pm.expect(pm.response.json().activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/series-documentales/{{serieConvenioId}}/estado?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["series-documentales", "{{serieConvenioId}}", "estado"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "4.9 Reactivar el tipo 2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a estar activo', () => pm.expect(pm.response.json().activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tipos-contrato/{{tipo2Id}}/estado?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["tipos-contrato", "{{tipo2Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "4.10 El selector vuelve a ofrecer los dos tipos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().map(t => t.id);",
+                  "pm.test('Incluye el tipo 1 y el tipo 2', () => {",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get('tipo1Id')));",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get('tipo2Id')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/tipos-contrato/activos" }
+        },
+        {
+          "name": "4.11 Rechazar cuerpo que no es JSON (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 415 Unsupported Media Type', () => pm.response.to.have.status(415));",
+                  "pm.test('Código GC-0010', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0010'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "text/plain" }],
+            "body": { "mode": "raw", "raw": "nombre=OPS" },
+            "url": "{{baseUrl}}/tipos-contrato"
+          }
+        }
+      ]
+    }
+  ]
+}
