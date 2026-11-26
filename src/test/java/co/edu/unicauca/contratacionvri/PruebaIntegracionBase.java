@@ -15,6 +15,7 @@ import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoIte
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoItemRepositorio;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
+import co.edu.unicauca.contratacionvri.proyecto.accesoADatos.repositorios.ProyectoRepositorio;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaJuridicaEntity;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.repositorios.TerceroRepositorio;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.Rol;
@@ -50,10 +51,14 @@ public abstract class PruebaIntegracionBase {
     @Autowired
     protected TerceroRepositorio terceroRepositorio;
 
+    @Autowired
+    protected ProyectoRepositorio proyectoRepositorio;
+
     @BeforeEach
     void limpiarBase() {
-        // Primero las tablas que referencian a las demás. Las personas jurídicas antes que las
-        // naturales, porque pueden apuntar a ellas como representante legal.
+        // Primero las tablas que referencian a las demás: proyecto apunta a persona_natural (director),
+        // y las personas jurídicas a las naturales (representante legal).
+        proyectoRepositorio.deleteAll();
         terceroRepositorio.deleteAll(terceroRepositorio.findAll().stream()
                 .filter(PersonaJuridicaEntity.class::isInstance).toList());
         terceroRepositorio.deleteAll();
@@ -88,12 +93,13 @@ public abstract class PruebaIntegracionBase {
         return dependenciaRepositorio.save(d);
     }
 
-    /** Hace POST, espera 201 y devuelve el id creado. */
+    /** Hace POST, espera 201 y devuelve el id creado ("id", o "idProyecto" en proyectos). */
     protected long crear(String url, Object peticion) throws Exception {
         String cuerpo = mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(peticion)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return json.readTree(cuerpo).get("id").asLong();
+        var respuesta = json.readTree(cuerpo);
+        return (respuesta.has("id") ? respuesta.get("id") : respuesta.get("idProyecto")).asLong();
     }
 }

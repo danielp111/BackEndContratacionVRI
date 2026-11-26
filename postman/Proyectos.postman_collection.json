@@ -1,0 +1,871 @@
+{
+  "info": {
+    "name": "Contratación VRI - Proyectos",
+    "description": "Pruebas de la API de proyectos. Ejecutar COMPLETA y EN ORDEN con el Collection Runner o con newman: cada petición usa los datos que guardó la anterior.\n\nLa carpeta 00 prepara los datos: un sufijo único por ejecución, códigos de proyecto que no chocan con ejecuciones anteriores, el tipo CÉDULA DE CIUDADANÍA (lo reutiliza si existe), dos personas naturales para director y una persona jurídica para probar que no puede ser directora.\n\nCada ejecución deja en la base 2 proyectos y 3 terceros de prueba.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "sufijo", "value": "" },
+    { "key": "codigo", "value": "" },
+    { "key": "codigo2", "value": "" },
+    { "key": "codigoInexistente", "value": "" },
+    { "key": "tipoCedulaId", "value": "" },
+    { "key": "director1Id", "value": "" },
+    { "key": "director2Id", "value": "" },
+    { "key": "empresaId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Obtener (o crear) tipo CÉDULA DE CIUDADANÍA",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Sufijo único por ejecución. Los códigos empiezan en 1, 2 y 3 seguidos de 8 dígitos:",
+                  "// caben en un INT (máximo 2.147.483.647) y no chocan con ejecuciones anteriores.",
+                  "const sufijo = Date.now().toString().slice(-8);",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('codigo', '1' + sufijo);",
+                  "pm.collectionVariables.set('codigo2', '2' + sufijo);",
+                  "pm.collectionVariables.set('codigoInexistente', '3' + sufijo);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const cedula = pm.response.json().find(i => i.codigoSireci === '3');",
+                  "if (cedula) {",
+                  "    pm.collectionVariables.set('tipoCedulaId', cedula.id);",
+                  "} else {",
+                  "    pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/catalogo-items',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ catalogo: 'TIPO_IDENTIFICACION', codigoSireci: '3', nombre: 'CÉDULA DE CIUDADANÍA' }) }",
+                  "    }, (err, res) => {",
+                  "        pm.test('Crea el tipo cédula', () => pm.expect(res.code).to.eql(201));",
+                  "        pm.collectionVariables.set('tipoCedulaId', res.json().id);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogo-items?catalogo=TIPO_IDENTIFICACION&activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogo-items"],
+              "query": [
+                { "key": "catalogo", "value": "TIPO_IDENTIFICACION" },
+                { "key": "activo", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear director 1 (persona natural)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('director1Id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"5{{sufijo}}\",\n  \"nombres\": \"Carlos\",\n  \"apellidos\": \"Ruiz P{{sufijo}}\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "Crear director 2 (persona natural)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('director2Id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"6{{sufijo}}\",\n  \"nombres\": \"Ana\",\n  \"apellidos\": \"Zapata P{{sufijo}}\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "Crear empresa (persona jurídica, no puede ser directora)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('empresaId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"7{{sufijo}}\",\n  \"razonSocial\": \"Empresa P{{sufijo}}\"\n}"
+            },
+            "url": "{{baseUrl}}/terceros/juridicas"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Crear",
+      "item": [
+        {
+          "name": "1.1 Crear proyecto (normaliza nombre y BPIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created con Location al código', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/api/proyectos/' + pm.collectionVariables.get('codigo') + '$'));",
+                  "});",
+                  "const p = pm.response.json();",
+                  "const sufijo = pm.collectionVariables.get('sufijo');",
+                  "pm.test('Usa el código digitado', () => pm.expect(p.idProyecto).to.eql(Number(pm.collectionVariables.get('codigo'))));",
+                  "pm.test('Recorta y colapsa espacios del nombre', () => pm.expect(p.nombre).to.eql('Agua potable rural P' + sufijo));",
+                  "pm.test('Quita los espacios del BPIN', () => pm.expect(p.bpin).to.eql('202300010012'));",
+                  "pm.test('Trae los datos del director', () => {",
+                  "    pm.expect(p.directorTerceroId).to.eql(Number(pm.collectionVariables.get('director1Id')));",
+                  "    pm.expect(p.directorNombre).to.eql('Carlos Ruiz P' + sufijo);",
+                  "    pm.expect(p.directorDocumento).to.eql('5' + sufijo);",
+                  "});",
+                  "pm.test('Queda activo', () => pm.expect(p.activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": {{codigo}},\n  \"nombre\": \"  Agua   potable  rural P{{sufijo}} \",\n  \"directorTerceroId\": {{director1Id}},\n  \"bpin\": \" 2023 0001 0012 \"\n}"
+            },
+            "url": "{{baseUrl}}/proyectos"
+          }
+        },
+        {
+          "name": "1.2 Rechazar código repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "const e = pm.response.json();",
+                  "pm.test('Código GC-0002', () => pm.expect(e.codigoError).to.eql('GC-0002'));",
+                  "pm.test('Nombra el código repetido', () => pm.expect(e.mensaje).to.eql('Ya existe el proyecto con código ' + pm.collectionVariables.get('codigo')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": {{codigo}},\n  \"nombre\": \"Impostor\",\n  \"directorTerceroId\": {{director2Id}}\n}"
+            },
+            "url": "{{baseUrl}}/proyectos"
+          }
+        },
+        {
+          "name": "1.3 Consultar: el original no se sobrescribió",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Conserva nombre y director originales', () => {",
+                  "    pm.expect(p.nombre).to.eql('Agua potable rural P' + pm.collectionVariables.get('sufijo'));",
+                  "    pm.expect(p.directorTerceroId).to.eql(Number(pm.collectionVariables.get('director1Id')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/proyectos/{{codigo}}" }
+        },
+        {
+          "name": "1.4 Rechazar campos inválidos (400 con detalle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Datos inválidos GC-0005', () => pm.expect(e.codigoError).to.eql('GC-0005'));",
+                  "pm.test('Detalla cada campo', () => {",
+                  "    pm.expect(e.errores.idProyecto).to.eql('El código del proyecto debe ser un número positivo');",
+                  "    pm.expect(e.errores.nombre).to.eql('El nombre del proyecto es obligatorio');",
+                  "    pm.expect(e.errores.directorTerceroId).to.eql('El director del proyecto es obligatorio');",
+                  "    pm.expect(e.errores.bpin).to.eql('El BPIN solo admite dígitos');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": 0,\n  \"nombre\": \"\",\n  \"directorTerceroId\": null,\n  \"bpin\": \"12A\"\n}"
+            },
+            "url": "{{baseUrl}}/proyectos"
+          }
+        },
+        {
+          "name": "1.5 Rechazar director inexistente (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Dice que el director no existe', () => pm.expect(pm.response.json().mensaje).to.eql('El director del proyecto con id 999999999 no existe'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": {{codigoInexistente}},\n  \"nombre\": \"Sin director real\",\n  \"directorTerceroId\": 999999999\n}"
+            },
+            "url": "{{baseUrl}}/proyectos"
+          }
+        },
+        {
+          "name": "1.6 Rechazar director que es persona jurídica (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Exige persona natural', () => pm.expect(pm.response.json().mensaje).to.include('debe ser una persona natural'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": {{codigoInexistente}},\n  \"nombre\": \"Dirigido por empresa\",\n  \"directorTerceroId\": {{empresaId}}\n}"
+            },
+            "url": "{{baseUrl}}/proyectos"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Actualizar",
+      "item": [
+        {
+          "name": "2.1 Actualizar nombre, director y BPIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "const sufijo = pm.collectionVariables.get('sufijo');",
+                  "pm.test('Conserva el código', () => pm.expect(p.idProyecto).to.eql(Number(pm.collectionVariables.get('codigo'))));",
+                  "pm.test('Cambia nombre y director', () => {",
+                  "    pm.expect(p.nombre).to.eql('Agua potable P' + sufijo);",
+                  "    pm.expect(p.directorNombre).to.eql('Ana Zapata P' + sufijo);",
+                  "});",
+                  "pm.test('PUT reemplaza: el BPIN no enviado queda en null', () => pm.expect(p.bpin).to.be.null);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Agua potable P{{sufijo}}\",\n  \"directorTerceroId\": {{director2Id}}\n}"
+            },
+            "url": "{{baseUrl}}/proyectos/{{codigo}}"
+          }
+        },
+        {
+          "name": "2.2 Rechazar cambio de código en el cuerpo (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que el código no se puede cambiar', () => pm.expect(pm.response.json().mensaje).to.include('no se puede cambiar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": {{codigoInexistente}},\n  \"nombre\": \"Agua potable P{{sufijo}}\",\n  \"directorTerceroId\": {{director2Id}}\n}"
+            },
+            "url": "{{baseUrl}}/proyectos/{{codigo}}"
+          }
+        },
+        {
+          "name": "2.3 Aceptar el mismo código en el cuerpo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Aplica el cambio', () => pm.expect(pm.response.json().bpin).to.eql('20230001'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": {{codigo}},\n  \"nombre\": \"Agua potable P{{sufijo}}\",\n  \"directorTerceroId\": {{director2Id}},\n  \"bpin\": \"20230001\"\n}"
+            },
+            "url": "{{baseUrl}}/proyectos/{{codigo}}"
+          }
+        },
+        {
+          "name": "2.4 Actualizar proyecto inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código GC-0003', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0003'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"No existe\",\n  \"directorTerceroId\": {{director2Id}}\n}"
+            },
+            "url": "{{baseUrl}}/proyectos/{{codigoInexistente}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Buscar",
+      "item": [
+        {
+          "name": "3.1 Crear segundo proyecto para las búsquedas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": {{codigo2}},\n  \"nombre\": \"Energía solar P{{sufijo}}\",\n  \"directorTerceroId\": {{director2Id}}\n}"
+            },
+            "url": "{{baseUrl}}/proyectos"
+          }
+        },
+        {
+          "name": "3.2 Buscar por código",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Encuentra solo ese proyecto', () => {",
+                  "    pm.expect(p.totalElementos).to.eql(1);",
+                  "    pm.expect(p.contenido[0].idProyecto).to.eql(Number(pm.collectionVariables.get('codigo')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos?id={{codigo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos"],
+              "query": [{ "key": "id", "value": "{{codigo}}" }]
+            }
+          }
+        },
+        {
+          "name": "3.3 Buscar por nombre (sin mayúsculas ni tildes)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Encuentra \"Energía solar\" buscando \"energia\"', () => {",
+                  "    pm.expect(p.totalElementos).to.eql(1);",
+                  "    pm.expect(p.contenido[0].idProyecto).to.eql(Number(pm.collectionVariables.get('codigo2')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos?nombre=ENERGIA SOLAR P{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos"],
+              "query": [{ "key": "nombre", "value": "ENERGIA SOLAR P{{sufijo}}" }]
+            }
+          }
+        },
+        {
+          "name": "3.4 Buscar por documento del director y paginar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Los 2 proyectos del director 2, de a 1 por página', () => {",
+                  "    pm.expect(p.totalElementos).to.eql(2);",
+                  "    pm.expect(p.totalPaginas).to.eql(2);",
+                  "    pm.expect(p.contenido.length).to.eql(1);",
+                  "    pm.expect(p.ultima).to.be.false;",
+                  "});",
+                  "pm.test('Ordena por código: primero el menor', () => pm.expect(p.contenido[0].idProyecto).to.eql(Number(pm.collectionVariables.get('codigo'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos?director=6{{sufijo}}&pagina=0&tamanio=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos"],
+              "query": [
+                { "key": "director", "value": "6{{sufijo}}" },
+                { "key": "pagina", "value": "0" },
+                { "key": "tamanio", "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.5 Buscar por nombre del director",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('El director 1 ya no dirige ninguno (se cambió en 2.1)', () => pm.expect(pm.response.json().totalElementos).to.eql(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos?director=ruiz p{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos"],
+              "query": [{ "key": "director", "value": "ruiz p{{sufijo}}" }]
+            }
+          }
+        },
+        {
+          "name": "3.6 Rechazar código no numérico en la búsqueda (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el formato', () => pm.expect(pm.response.json().errores.id).to.eql('El código solo admite dígitos'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos?id=50A",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos"],
+              "query": [{ "key": "id", "value": "50A" }]
+            }
+          }
+        },
+        {
+          "name": "3.7 Rechazar tamaño de página mayor a 100 (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el límite', () => pm.expect(pm.response.json().errores.tamanio).to.eql('El tamaño máximo de página es 100'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos?tamanio=101",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos"],
+              "query": [{ "key": "tamanio", "value": "101" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Estado y activos",
+      "item": [
+        {
+          "name": "4.1 Activos para selector (con etiqueta)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "const sufijo = pm.collectionVariables.get('sufijo');",
+                  "pm.test('Trae los 2 proyectos de esta ejecución', () => pm.expect(lista.length).to.eql(2));",
+                  "pm.test('Etiqueta \"código - nombre\"', () => pm.expect(lista[0].etiqueta).to.eql(pm.collectionVariables.get('codigo') + ' - Agua potable P' + sufijo));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos/activos?texto=p{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos", "activos"],
+              "query": [{ "key": "texto", "value": "p{{sufijo}}" }]
+            }
+          }
+        },
+        {
+          "name": "4.2 Inactivar el segundo proyecto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos/{{codigo2}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos", "{{codigo2}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.3 Activos ya no ofrece el proyecto inactivo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().map(p => p.idProyecto);",
+                  "pm.test('Solo queda el primer proyecto', () => pm.expect(ids).to.eql([Number(pm.collectionVariables.get('codigo'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos/activos?texto=p{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos", "activos"],
+              "query": [{ "key": "texto", "value": "p{{sufijo}}" }]
+            }
+          }
+        },
+        {
+          "name": "4.4 El inactivo sigue existiendo y se puede consultar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Sigue ahí, inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/proyectos/{{codigo2}}" }
+        },
+        {
+          "name": "4.5 Reactivar el segundo proyecto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a estar activo', () => pm.expect(pm.response.json().activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/proyectos/{{codigo2}}/estado?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["proyectos", "{{codigo2}}", "estado"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "4.6 Inactivar al director 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/terceros/{{director1Id}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["terceros", "{{director1Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.7 Rechazar asignar un director inactivo (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Dice que el director está inactivo', () => pm.expect(pm.response.json().mensaje).to.eql('El director del proyecto Carlos Ruiz P' + pm.collectionVariables.get('sufijo') + ' está inactivo'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Agua potable P{{sufijo}}\",\n  \"directorTerceroId\": {{director1Id}}\n}"
+            },
+            "url": "{{baseUrl}}/proyectos/{{codigo}}"
+          }
+        },
+        {
+          "name": "4.8 Inactivar al director 2 (ya asignado a los proyectos)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/terceros/{{director2Id}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["terceros", "{{director2Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.9 Editar el proyecto con su director ya inactivo sí se permite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Aplica el cambio y conserva al director', () => {",
+                  "    pm.expect(p.nombre).to.eql('Agua potable y saneamiento P' + pm.collectionVariables.get('sufijo'));",
+                  "    pm.expect(p.directorTerceroId).to.eql(Number(pm.collectionVariables.get('director2Id')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Agua potable y saneamiento P{{sufijo}}\",\n  \"directorTerceroId\": {{director2Id}}\n}"
+            },
+            "url": "{{baseUrl}}/proyectos/{{codigo}}"
+          }
+        },
+        {
+          "name": "4.10 Rechazar cuerpo que no es JSON (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 415 Unsupported Media Type', () => pm.response.to.have.status(415));",
+                  "pm.test('Código GC-0010', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0010'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "text/plain" }],
+            "body": { "mode": "raw", "raw": "idProyecto=1" },
+            "url": "{{baseUrl}}/proyectos"
+          }
+        }
+      ]
+    }
+  ]
+}

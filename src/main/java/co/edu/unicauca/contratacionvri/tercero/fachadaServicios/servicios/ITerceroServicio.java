@@ -2,6 +2,7 @@ package co.edu.unicauca.contratacionvri.tercero.fachadaServicios.servicios;
 
 import co.edu.unicauca.contratacionvri.comun.fachadaServicios.PaginaRespuesta;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.Naturaleza;
+import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaNaturalEntity;
 import co.edu.unicauca.contratacionvri.tercero.fachadaServicios.DTOPeticion.PersonaJuridicaDTOPeticion;
 import co.edu.unicauca.contratacionvri.tercero.fachadaServicios.DTOPeticion.PersonaNaturalDTOPeticion;
 import co.edu.unicauca.contratacionvri.tercero.fachadaServicios.DTORespuesta.PersonaJuridicaDTORespuesta;
@@ -33,4 +34,12 @@ public interface ITerceroServicio {
 
     /** Activa o inactiva. No hay borrado físico: el tercero puede estar en contratos. */
     TerceroDTORespuesta cambiarEstado(Long id, boolean activo);
+
+    /**
+     * Para otros dominios (representante legal, director de proyecto, supervisor...): devuelve la
+     * persona natural con ese id. Si es la misma que ya estaba asignada ({@code actual}) la devuelve
+     * sin más validaciones; si cambia, debe existir, ser persona natural y estar activa.
+     * Lanza ReglaNegocioException (400) con el {@code rol} en el mensaje, p. ej. "director del proyecto".
+     */
+    PersonaNaturalEntity obtenerPersonaNaturalValida(Long id, PersonaNaturalEntity actual, String rol);
 }

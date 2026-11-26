@@ -203,11 +203,13 @@ El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 
 | Campo | Tipo | Llave / regla |
 |---|---|---|
-| id_proyecto | INT | PK (código institucional, ej. 5019) |
-| nombre | VARCHAR(400) | |
-| director_tercero_id | BIGINT | FK `tercero` |
-| bpin | VARCHAR(20) | |
-| activo | BOOLEAN | |
+| id_proyecto | INT | PK (código institucional que digita el usuario, ej. 5019). No autoincremental, positivo, no cambia después de crear |
+| nombre | VARCHAR(400) | Obligatorio |
+| director_tercero_id | BIGINT | Obligatorio. FK `persona_natural`: debe existir, ser persona natural y estar activo al asignarlo o cambiarlo |
+| bpin | VARCHAR(20) | Opcional, solo dígitos (se quitan los espacios). No es único |
+| activo | BOOLEAN | `true` al crear. Inactivo: no se ofrece para contratos nuevos; los existentes lo conservan |
+
+`ProyectoEntity` implementa `Persistable`: con la llave asignada a mano, `save()` haría merge y crear un código repetido sobrescribiría el proyecto existente. Así siempre inserta, y el servicio responde 409 si el código ya existe.
 
 **`rubro_presupuestal`**
 
@@ -413,7 +415,7 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia` y `tercero`. Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero` y `proyecto`. Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -433,6 +435,8 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Relaciones entre dominios: el DTOPeticion recibe el id (`usuarioId`, `dependenciaId`…); el servicio la valida con el método `obtener…Valido` del servicio del otro dominio (existe, está activa, pertenece al catálogo correcto) y la asigna. ModelMapper no copia relaciones: en el TypeMap de la petición se hacen `skip` de los setters de relación. Al actualizar, solo se exige que esté activo un valor que cambia.
 - Textos: Jackson normaliza todo texto al leer el JSON, antes de `@Valid` (`configuracion/ConfiguracionJackson`): recorta, colapsa espacios horizontales repetidos y convierte `""` en `null`. Cada servicio termina la limpieza con `comun/utilidades/Textos` (correos en minúsculas; documentos, nombres de catálogo y dependencia en mayúsculas).
 - Búsquedas paginadas: devuelven `comun/fachadaServicios/PaginaRespuesta` (contenido, pagina, tamanio, totalElementos, totalPaginas, primera, ultima), con parámetros `pagina` (desde 0) y `tamanio` (1 a 100) y orden fijo definido por el servicio. Los comodines de LIKE del usuario se escapan con `!`.
+- Proyectos: `POST /api/proyectos` (con `idProyecto`), `GET/PUT /api/proyectos/{idProyecto}` (un `idProyecto` distinto en el cuerpo da 400), `PATCH /{idProyecto}/estado`, `GET /api/proyectos?id=&nombre=&director=&activo=&pagina=&tamanio=` y `GET /api/proyectos/activos?texto=` para selectores. Los demás dominios validan un proyecto con `IProyectoServicio.obtenerProyectoValido(id, exigirActivo)`.
+- Personas naturales asignadas (representante legal, director, y luego supervisor o contratista): validar con `ITerceroServicio.obtenerPersonaNaturalValida(id, actual, rol)`.
 - Terceros: `POST/PUT /api/terceros/naturales[/{id}]` y `/api/terceros/juridicas[/{id}]` con DTOs distintos; `GET /api/terceros/{id}` devuelve la forma según la naturaleza; `GET /api/terceros?documento=&nombre=&naturaleza=&activo=&pagina=&tamanio=`.
 - Errores HTTP: 400 (validación o regla de negocio), 404 (no existe), 409 (duplicado), 415 (cuerpo que no es `application/json`).
 - No hay borrado físico de maestros: se usa `PATCH /{id}/estado?activo=`.
