@@ -1,0 +1,630 @@
+{
+  "info": {
+    "name": "Contratación VRI - Rubros presupuestales",
+    "description": "Pruebas del catálogo de rubros presupuestales (códigos de afectación presupuestal). Ejecutar COMPLETA y EN ORDEN con el Collection Runner o con newman: cada petición usa los datos que guardó la anterior.\n\nLa carpeta 00 genera códigos y nombres únicos por ejecución y verifica la carga inicial (data.sql): 51 rubros, códigos como texto exacto y orden numérico.\n\nCada ejecución crea 2 rubros de prueba y al final los deja INACTIVOS, para que no aparezcan en los selectores.\n\nLa regla \"el código no cambia si hay contratos\" no se puede probar por API mientras no exista la tabla contrato (el checker provisional responde \"sin contratos\"); está cubierta por las pruebas en Java.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "sufijo", "value": "" },
+    { "key": "codigoCeros", "value": "" },
+    { "key": "codigo", "value": "" },
+    { "key": "codigoNuevo", "value": "" },
+    { "key": "rubroId", "value": "" },
+    { "key": "rubro2Id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Verificar el orden y el total de la carga inicial",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Códigos únicos por ejecución. codigoCeros prueba que se conservan ceros a la izquierda, puntos y guiones.",
+                  "const sufijo = Date.now().toString().slice(-8);",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('codigoCeros', '00' + sufijo + '.1-02');",
+                  "pm.collectionVariables.set('codigo', '8' + sufijo);",
+                  "pm.collectionVariables.set('codigoNuevo', '7' + sufijo);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Al menos los 51 rubros de la hoja CONTROL', () => pm.expect(p.totalElementos).to.be.at.least(51));",
+                  "pm.test('Orden numérico como el Excel: 1031, 1027008, 1034001', () => {",
+                  "    pm.expect(p.contenido.map(r => r.codigo)).to.eql(['1031', '1027008', '1034001']);",
+                  "});",
+                  "pm.test('Etiqueta \"código - nombre\"', () => pm.expect(p.contenido[0].etiqueta).to.eql('1031 - Dirección Vice-rectoría Investigaciones'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros?tamanio=3",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros"],
+              "query": [{ "key": "tamanio", "value": "3" }]
+            }
+          }
+        },
+        {
+          "name": "Verificar un código que el Excel guardaba como número",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().contenido.find(x => x.codigo === '9011044001');",
+                  "pm.test('9011044001 cargado como texto exacto (no 9.011044001E9)', () => pm.expect(r).to.exist);",
+                  "pm.test('Con su nombre', () => pm.expect(r.nombre).to.eql('Servicios prestados a Empresas y'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros?texto=9011044001",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros"],
+              "query": [{ "key": "texto", "value": "9011044001" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Crear",
+      "item": [
+        {
+          "name": "1.1 Crear rubro (conserva ceros, puntos y guiones; normaliza el nombre)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created con Location', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.response.to.have.header('Location');",
+                  "});",
+                  "const r = pm.response.json();",
+                  "const codigo = pm.collectionVariables.get('codigoCeros');",
+                  "const nombre = 'Investigación prueba R' + pm.collectionVariables.get('sufijo');",
+                  "pm.test('Código exacto, con ceros a la izquierda, punto y guion', () => pm.expect(r.codigo).to.eql(codigo));",
+                  "pm.test('Nombre recortado y sin espacios dobles', () => pm.expect(r.nombre).to.eql(nombre));",
+                  "pm.test('Etiqueta \"código - nombre\"', () => pm.expect(r.etiqueta).to.eql(codigo + ' - ' + nombre));",
+                  "pm.test('Activo y con código editable (sin contratos)', () => {",
+                  "    pm.expect(r.activo).to.be.true;",
+                  "    pm.expect(r.codigoEditable).to.be.true;",
+                  "});",
+                  "pm.collectionVariables.set('rubroId', r.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"  {{codigoCeros}} \",\n  \"nombre\": \"  Investigación   prueba R{{sufijo}} \"\n}" },
+            "url": "{{baseUrl}}/rubros"
+          }
+        },
+        {
+          "name": "1.2 Crear otro rubro con el mismo nombre (el nombre puede repetirse)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Mismo nombre que el rubro anterior', () => pm.expect(pm.response.json().nombre).to.eql('Investigación prueba R' + pm.collectionVariables.get('sufijo')));",
+                  "pm.collectionVariables.set('rubro2Id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigo}}\",\n  \"nombre\": \"Investigación prueba R{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/rubros"
+          }
+        },
+        {
+          "name": "1.3 Rechazar código repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "const e = pm.response.json();",
+                  "pm.test('Código GC-0002', () => pm.expect(e.codigoError).to.eql('GC-0002'));",
+                  "pm.test('Nombra el código repetido', () => pm.expect(e.mensaje).to.eql('Ya existe el rubro con código ' + pm.collectionVariables.get('codigo')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigo}}\",\n  \"nombre\": \"Otro nombre\"\n}" },
+            "url": "{{baseUrl}}/rubros"
+          }
+        },
+        {
+          "name": "1.4 Rechazar código con espacios (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el formato del código', () => pm.expect(pm.response.json().errores.codigo).to.include('solo admite números y letras'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"10 37\",\n  \"nombre\": \"Código con espacio\"\n}" },
+            "url": "{{baseUrl}}/rubros"
+          }
+        },
+        {
+          "name": "1.5 Rechazar campos vacíos (400 con detalle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Datos inválidos GC-0005', () => pm.expect(e.codigoError).to.eql('GC-0005'));",
+                  "pm.test('Detalla código y nombre', () => {",
+                  "    pm.expect(e.errores.codigo).to.eql('El código del rubro es obligatorio');",
+                  "    pm.expect(e.errores.nombre).to.eql('El nombre del rubro es obligatorio');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"\",\n  \"nombre\": \"   \"\n}" },
+            "url": "{{baseUrl}}/rubros"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Buscar",
+      "item": [
+        {
+          "name": "2.1 Buscar por prefijo del código",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Encuentra solo el rubro con ese prefijo', () => {",
+                  "    pm.expect(p.totalElementos).to.eql(1);",
+                  "    pm.expect(p.contenido[0].id).to.eql(Number(pm.collectionVariables.get('rubroId')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros?texto=00{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros"],
+              "query": [{ "key": "texto", "value": "00{{sufijo}}" }]
+            }
+          }
+        },
+        {
+          "name": "2.2 Buscar por nombre sin tildes ni mayúsculas (MySQL)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('\"INVESTIGACION\" encuentra \"Investigación\": los 2 rubros de esta ejecución', () => pm.expect(p.totalElementos).to.eql(2));",
+                  "pm.test('Ordena por código: el más corto primero', () => {",
+                  "    pm.expect(p.contenido.map(r => r.codigo)).to.eql([pm.collectionVariables.get('codigo'), pm.collectionVariables.get('codigoCeros')]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros?texto=INVESTIGACION PRUEBA R{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros"],
+              "query": [{ "key": "texto", "value": "INVESTIGACION PRUEBA R{{sufijo}}" }]
+            }
+          }
+        },
+        {
+          "name": "2.3 Paginar los resultados",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Página 1 de 2, con 1 elemento', () => {",
+                  "    pm.expect(p.pagina).to.eql(1);",
+                  "    pm.expect(p.tamanio).to.eql(1);",
+                  "    pm.expect(p.totalPaginas).to.eql(2);",
+                  "    pm.expect(p.contenido.length).to.eql(1);",
+                  "    pm.expect(p.ultima).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros?texto=prueba r{{sufijo}}&pagina=1&tamanio=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros"],
+              "query": [
+                { "key": "texto", "value": "prueba r{{sufijo}}" },
+                { "key": "pagina", "value": "1" },
+                { "key": "tamanio", "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.4 Rechazar tamaño de página mayor a 100 (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el límite', () => pm.expect(pm.response.json().errores.tamanio).to.eql('El tamaño máximo de página es 100'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros?tamanio=101",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros"],
+              "query": [{ "key": "tamanio", "value": "101" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Actualizar",
+      "item": [
+        {
+          "name": "3.1 Cambiar código y nombre (sin contratos se permite)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const codigo = pm.collectionVariables.get('codigoNuevo');",
+                  "const nombre = 'Fortalecimiento prueba R' + pm.collectionVariables.get('sufijo');",
+                  "pm.test('Aplica el código y el nombre nuevos', () => {",
+                  "    pm.expect(r.codigo).to.eql(codigo);",
+                  "    pm.expect(r.nombre).to.eql(nombre);",
+                  "    pm.expect(r.etiqueta).to.eql(codigo + ' - ' + nombre);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigoNuevo}}\",\n  \"nombre\": \"Fortalecimiento prueba R{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/rubros/{{rubro2Id}}"
+          }
+        },
+        {
+          "name": "3.2 Rechazar cambiar al código de otro rubro (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"{{codigoCeros}}\",\n  \"nombre\": \"Fortalecimiento prueba R{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/rubros/{{rubro2Id}}"
+          }
+        },
+        {
+          "name": "3.3 Actualizar rubro inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código GC-0003', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0003'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"1\",\n  \"nombre\": \"No existe\"\n}" },
+            "url": "{{baseUrl}}/rubros/999999999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Estado",
+      "item": [
+        {
+          "name": "4.1 Inactivar el rubro 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros/{{rubroId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros", "{{rubroId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.2 Los activos (selector) ya no lo ofrecen",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().contenido.map(r => r.id);",
+                  "pm.test('Solo queda el rubro 2', () => pm.expect(ids).to.eql([Number(pm.collectionVariables.get('rubro2Id'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros?texto=prueba r{{sufijo}}&activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros"],
+              "query": [
+                { "key": "texto", "value": "prueba r{{sufijo}}" },
+                { "key": "activo", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Listar inactivos de esta ejecución",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Solo el rubro 1, inactivo', () => {",
+                  "    pm.expect(p.contenido.map(r => r.id)).to.eql([Number(pm.collectionVariables.get('rubroId'))]);",
+                  "    pm.expect(p.contenido[0].activo).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros?texto=prueba r{{sufijo}}&activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros"],
+              "query": [
+                { "key": "texto", "value": "prueba r{{sufijo}}" },
+                { "key": "activo", "value": "false" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.4 Reactivar el rubro 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a estar activo', () => pm.expect(pm.response.json().activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros/{{rubroId}}/estado?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros", "{{rubroId}}", "estado"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "4.5 Consultar rubro inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/rubros/999999999" }
+        },
+        {
+          "name": "4.6 Rechazar cuerpo que no es JSON (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 415 Unsupported Media Type', () => pm.response.to.have.status(415));",
+                  "pm.test('Código GC-0010', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0010'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "text/plain" }],
+            "body": { "mode": "raw", "raw": "1031 - Dirección VRI" },
+            "url": "{{baseUrl}}/rubros"
+          }
+        }
+      ]
+    },
+    {
+      "name": "99 Limpieza",
+      "item": [
+        {
+          "name": "Inactivar el rubro 1 de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo (no aparece en selectores)', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros/{{rubroId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros", "{{rubroId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "Inactivar el rubro 2 de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo (no aparece en selectores)', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rubros/{{rubro2Id}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["rubros", "{{rubro2Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
