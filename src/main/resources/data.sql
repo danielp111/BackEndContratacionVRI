@@ -178,3 +178,78 @@ INSERT IGNORE INTO rubro_presupuestal (id, codigo, nombre, activo, creado_en, ac
     (49, '4902189', 'ACUERDO PY SUCCES MALARDALEN UNIVERSITY', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     (50, '4901505', 'CON.2023-0870 ICETEX-MCTel-UNIVERSIDADES', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     (51, '4901523', 'CONVENIO INTERADM. 395-2025 ICANH', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- =============================================================================================
+-- Dependencias de la universidad. Fuente: lista entregada por la VRI (55 dependencias, en seis
+-- grupos). Los nombres van tal como vienen en esa lista, con tildes y sin anteponer el tipo
+-- ("de Admisiones" es una división; "Jurídica", una oficina).
+--   * id 1 = Vicerrectoría de Investigaciones: coincide con la fila que ya existía en desarrollo,
+--     a la que apuntan abogados; INSERT IGNORE la salta sin cambiarla.
+--   * NO se usó la lista Control_Dependencias del Excel (CONTROL!C19:C100): mezcla códigos
+--     numéricos y nombres.
+--   * Posibles duplicados POR CONFIRMAR con la VRI (se cargan todos activos): Facultad de Ciencias
+--     Agrarias / Agropecuarias; de Admisiones / Admisiones y Registro; de Salud Ocupacional /
+--     de Seguridad y Salud en el Trabajo; de Gestión del Talento Humano / Recursos Humanos - Pensiones.
+-- =============================================================================================
+INSERT IGNORE INTO dependencia (id, nombre, activo, creado_en, actualizado_en) VALUES
+    (1 , 'Vicerrectoría de Investigaciones',                                TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- Facultades y posgrados
+    (2 , 'Facultad de Artes',                                               TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (3 , 'Facultad de Ciencias Agrarias',                                   TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (4 , 'Facultad de Ciencias Agropecuarias',                              TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (5 , 'Facultad de Ciencias Contables, Económicas y Administrativas',    TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (6 , 'Facultad de Ciencias de la Salud',                                TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (7 , 'Facultad de Ciencias Humanas y Sociales',                         TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (8 , 'Facultad de Ciencias Naturales, Exactas y de la Educación',       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (9 , 'Facultad de Derecho, Ciencias Políticas y Sociales',              TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (10, 'Facultad de Ingeniería Civil',                                    TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (11, 'Facultad de Ingeniería Electrónica y Telecomunicaciones',         TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (12, 'Posgrados',                                                       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (13, 'Programa de Especialización, Maestría y Doctorado FIET',          TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (14, 'Doctorado en Ciencias Ambientales',                               TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (15, 'Doctorado en Ingeniería Telemática',                              TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (16, 'Doctorado en Ciencias de la Educación',                           TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (17, 'Maestría en Educación Becas Excelencia MEN',                      TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (18, 'Maestría en Educación Popular Santander de Quilichao',            TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- Rectoría y vicerrectorías
+    (19, 'Rectoría',                                                        TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (20, 'Secretaría General',                                              TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (21, 'Vicerrectoría Académica',                                         TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (22, 'Vicerrectoría Administrativa',                                    TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (23, 'Vicerrectoría de Cultura y Bienestar',                            TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- Divisiones
+    (24, 'Administrativa y de Servicios',                                   TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (25, 'de Admisiones',                                                   TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (26, 'de Gestión de la Investigación',                                  TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (27, 'de Gestión de la Recreación y el Deporte',                        TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (28, 'de Gestión de Medios y Recursos Bibliográficos',                  TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (29, 'de Gestión de Salud Integral',                                    TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (30, 'de Gestión del Talento Humano',                                   TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (31, 'de Gestión Financiera',                                           TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (32, 'de Innovación, Emprendimiento y Articulación con el Entorno',     TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (33, 'de Tecnologías de la Información y las Telecomunicaciones',       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- Oficinas
+    (34, 'de Control Interno',                                              TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (35, 'de Planeación y Desarrollo Institucional',                        TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (36, 'de Relaciones Interinstitucionales e Internacionales',            TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (37, 'Jurídica',                                                        TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- Áreas
+    (38, 'de Adquisiciones e Inventarios',                                  TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (39, 'de Desarrollo Editorial',                                         TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (40, 'de Salud Ocupacional',                                            TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (41, 'de Seguridad, Control y Movilidad',                               TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (42, 'de Seguridad y Salud en el Trabajo',                              TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (43, 'de Servicio y Mantenimiento',                                     TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    -- Centros y otras unidades
+    (44, 'Admisiones y Registro',                                           TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (45, 'CECAV',                                                           TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (46, 'Centro de Regionalización',                                       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (47, 'Centro de Educación Continua',                                    TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (48, 'Centro de Gestión de la Calidad y la Acreditación Institucional', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (49, 'Centro de Gestión de las Comunicaciones',                         TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (50, 'Centro Universitario en Salud Alfonso López',                     TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (51, 'Consultorio Jurídico',                                            TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (52, 'Egresados',                                                       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (53, 'Recursos Humanos - Pensiones',                                    TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (54, 'Unidad de Salud',                                                 TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (55, 'Unilingua',                                                       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

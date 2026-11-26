@@ -251,8 +251,11 @@ El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 | Campo | Tipo | Llave / regla |
 |---|---|---|
 | id | BIGINT | PK |
-| nombre | VARCHAR(200) | Único |
+| nombre | VARCHAR(200) | Único (sin distinguir mayúsculas ni tildes, por la collation). Se guarda tal como se escribe, con tildes: ya no se pasa a mayúsculas |
 | activo | BOOLEAN | |
+
+- Carga inicial (`data.sql`, ids 1 a 55): la lista de 55 dependencias entregada por la VRI (facultades y posgrados, rectoría y vicerrectorías, divisiones, oficinas, áreas, centros y otras unidades), con los nombres tal como vienen en esa lista. Las divisiones, oficinas y áreas van sin anteponer el tipo ("de Admisiones", "Jurídica", "de Desarrollo Editorial"). El id 1 es "Vicerrectoría de Investigaciones".
+- No se usó la lista `Control_Dependencias` del Excel (CONTROL!C19:C100): mezcla códigos numéricos y nombres.
 
 ### 2. Usuarios y abogados
 
@@ -438,10 +441,11 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 - Cómo distinguir avance programado del real (hoy usan la misma fórmula).
 - Confirmar que el SIRECI es trimestral (el diccionario dice mensual).
 - Nombre completo de los rubros 9011141 y 9011044001: en el Excel ambos dicen "Servicios prestados a Empresas y", que parece truncado.
+- Dependencias que podrían ser la misma (se cargaron todas activas): "Facultad de Ciencias Agrarias" y "Facultad de Ciencias Agropecuarias"; "de Admisiones" y "Admisiones y Registro"; "de Salud Ocupacional" y "de Seguridad y Salud en el Trabajo"; "de Gestión del Talento Humano" y "Recursos Humanos - Pensiones". Si alguno es un nombre anterior, conviene inactivarlo (sirve para migrar contratos viejos sin ofrecerse en selectores).
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos) `clasecontrato` (clases SIRECI) y `rubro` (rubros presupuestales). Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos), `clasecontrato` (clases SIRECI) y `rubro` (rubros presupuestales). Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -459,7 +463,7 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Errores: `excepciones/ControladorExcepciones` devuelve siempre `ErrorRespuesta` (codigoError, mensaje, codigoHttp, url, metodo, fecha, errores por campo). Lanzar `EntidadNoExisteException` (404), `EntidadYaExisteException` (409) o `ReglaNegocioException` (400) desde los servicios.
 - Las entidades de negocio extienden `comun/accesoADatos/EntidadAuditable`, que trae `creado_en/por` y `actualizado_en/por` llenados por JPA Auditing (`configuracion/ConfiguracionAuditoria`); `*_por` queda nulo hasta que exista el login.
 - Relaciones entre dominios: el DTOPeticion recibe el id (`usuarioId`, `dependenciaId`…); el servicio la valida con el método `obtener…Valido` del servicio del otro dominio (existe, está activa, pertenece al catálogo correcto) y la asigna. ModelMapper no copia relaciones: en el TypeMap de la petición se hacen `skip` de los setters de relación. Al actualizar, solo se exige que esté activo un valor que cambia.
-- Textos: Jackson normaliza todo texto al leer el JSON, antes de `@Valid` (`configuracion/ConfiguracionJackson`): recorta, colapsa espacios horizontales repetidos y convierte `""` en `null`. Cada servicio termina la limpieza con `comun/utilidades/Textos` (correos en minúsculas; documentos, nombres de catálogo y dependencia en mayúsculas).
+- Textos: Jackson normaliza todo texto al leer el JSON, antes de `@Valid` (`configuracion/ConfiguracionJackson`): recorta, colapsa espacios horizontales repetidos y convierte `""` en `null`. Cada servicio termina la limpieza con `comun/utilidades/Textos` (correos en minúsculas; documentos y nombres de `catalogo_item` en mayúsculas). Los nombres que se muestran al usuario y en reportes (dependencias, tipos de contrato, clases SIRECI, rubros, terceros, proyectos) se guardan tal como se escriben, con tildes; la collation evita duplicados por mayúsculas o tildes.
 - Búsquedas paginadas: devuelven `comun/fachadaServicios/PaginaRespuesta` (contenido, pagina, tamanio, totalElementos, totalPaginas, primera, ultima), con parámetros `pagina` (desde 0) y `tamanio` (1 a 100) y orden fijo definido por el servicio. Los comodines de LIKE del usuario se escapan con `!`.
 - Proyectos: `POST /api/proyectos` (con `idProyecto`), `GET/PUT /api/proyectos/{idProyecto}` (un `idProyecto` distinto en el cuerpo da 400), `PATCH /{idProyecto}/estado`, `GET /api/proyectos?id=&nombre=&director=&activo=&pagina=&tamanio=` y `GET /api/proyectos/activos?texto=` para selectores. Los demás dominios validan un proyecto con `IProyectoServicio.obtenerProyectoValido(id, exigirActivo)`.
 - Personas naturales asignadas (representante legal, director, y luego supervisor o contratista): validar con `ITerceroServicio.obtenerPersonaNaturalValida(id, actual, rol)`.

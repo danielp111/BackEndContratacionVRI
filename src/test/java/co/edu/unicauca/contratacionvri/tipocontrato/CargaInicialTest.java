@@ -19,6 +19,8 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.AmbitoClase;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.ClaseContratoEntity;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.repositorios.ClaseContratoRepositorio;
+import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
+import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
 import co.edu.unicauca.contratacionvri.rubro.accesoADatos.modelos.RubroEntity;
 import co.edu.unicauca.contratacionvri.rubro.accesoADatos.repositorios.RubroRepositorio;
 import co.edu.unicauca.contratacionvri.tipocontrato.accesoADatos.modelos.ConsecutivoEntity;
@@ -58,6 +60,9 @@ class CargaInicialTest {
 
     @Autowired
     private RubroRepositorio rubros;
+
+    @Autowired
+    private DependenciaRepositorio dependencias;
 
     @Autowired
     private INumeracionServicio numeracion;
@@ -251,6 +256,57 @@ class CargaInicialTest {
 
         assertThat(rubros.count()).isEqualTo(51);
         assertThat(rubro("1052002").getActivo()).as("no se reactiva").isFalse();
+    }
+
+    // ------------------------------------------------------------------ dependencias
+
+    private DependenciaEntity dependencia(String nombre) {
+        return dependencias.findAll().stream().filter(d -> d.getNombre().equals(nombre)).findFirst().orElseThrow();
+    }
+
+    /** 10 a 14 del plan: cantidad, id 1, textos exactos, posibles duplicados y sin repetidos. */
+    @Test
+    @Order(11)
+    void cargaLas55DependenciasDeLaListaDeLaVri() {
+        assertThat(dependencias.count()).isEqualTo(55);
+        assertThat(dependencias.findAll()).allMatch(DependenciaEntity::getActivo);
+
+        assertThat(dependencias.findById(1L).orElseThrow().getNombre()).isEqualTo("Vicerrectoría de Investigaciones");
+
+        // Textos exactos: tildes, comas y sin prefijo en divisiones, oficinas y áreas.
+        assertThat(dependencias.findAll()).extracting(DependenciaEntity::getNombre).contains(
+                "Facultad de Ciencias Contables, Económicas y Administrativas",
+                "Centro Universitario en Salud Alfonso López",
+                "Programa de Especialización, Maestría y Doctorado FIET",
+                "de Admisiones", "Jurídica", "de Desarrollo Editorial", "Administrativa y de Servicios",
+                "Recursos Humanos - Pensiones", "CECAV", "Unilingua");
+
+        // Los cuatro pares de posibles duplicados se cargan, activos.
+        for (String nombre : new String[]{"Facultad de Ciencias Agrarias", "Facultad de Ciencias Agropecuarias",
+                "de Admisiones", "Admisiones y Registro", "de Salud Ocupacional", "de Seguridad y Salud en el Trabajo",
+                "de Gestión del Talento Humano", "Recursos Humanos - Pensiones"}) {
+            assertThat(dependencia(nombre).getActivo()).as(nombre).isTrue();
+        }
+
+        // Ningún nombre repetido, ni siquiera ignorando mayúsculas y tildes.
+        assertThat(dependencias.findAll().stream()
+                .map(d -> java.text.Normalizer.normalize(d.getNombre(), java.text.Normalizer.Form.NFD)
+                        .replaceAll("\\p{M}", "").toLowerCase(java.util.Locale.ROOT)))
+                .doesNotHaveDuplicates();
+    }
+
+    /** 15 del plan: volver a cargar no duplica ni reactiva. */
+    @Test
+    @Order(12)
+    void volverACargarNoDuplicaNiReactivaDependencias() {
+        DependenciaEntity cecav = dependencia("CECAV");
+        cecav.setActivo(false);
+        dependencias.save(cecav);
+
+        volverACargarDataSql();
+
+        assertThat(dependencias.count()).isEqualTo(55);
+        assertThat(dependencia("CECAV").getActivo()).as("no se reactiva").isFalse();
     }
 
     @Test
