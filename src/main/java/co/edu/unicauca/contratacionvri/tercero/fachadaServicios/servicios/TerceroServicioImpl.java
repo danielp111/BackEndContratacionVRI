@@ -210,25 +210,27 @@ public class TerceroServicioImpl implements ITerceroServicio {
         }
     }
 
-    /**
-     * El representante legal es opcional. Si se envía debe existir y ser persona natural; debe
-     * estar activo solo si cambia (igual que las demás relaciones).
-     */
+    /** El representante legal es opcional; si se envía se valida como cualquier persona natural asignada. */
     private PersonaNaturalEntity obtenerRepresentante(PersonaNaturalEntity actual, Long representanteId) {
         if (representanteId == null) {
             return null;
         }
-        if (actual != null && Objects.equals(actual.getId(), representanteId)) {
+        return obtenerPersonaNaturalValida(representanteId, actual, "representante legal");
+    }
+
+    @Override
+    public PersonaNaturalEntity obtenerPersonaNaturalValida(Long id, PersonaNaturalEntity actual, String rol) {
+        if (actual != null && Objects.equals(actual.getId(), id)) {
             return actual;
         }
-        TerceroEntity tercero = repositorio.findById(representanteId).orElseThrow(() ->
-                new ReglaNegocioException("El representante legal con id " + representanteId + " no existe"));
+        TerceroEntity tercero = repositorio.findById(id).orElseThrow(() ->
+                new ReglaNegocioException("El " + rol + " con id " + id + " no existe"));
         if (!(tercero instanceof PersonaNaturalEntity persona)) {
-            throw new ReglaNegocioException("El representante legal debe ser una persona natural y "
+            throw new ReglaNegocioException("El " + rol + " debe ser una persona natural y "
                     + tercero.getNombreCompleto() + " es persona jurídica");
         }
         if (!Boolean.TRUE.equals(persona.getActivo())) {
-            throw new ReglaNegocioException("El representante legal " + persona.getNombreCompleto() + " está inactivo");
+            throw new ReglaNegocioException("El " + rol + " " + persona.getNombreCompleto() + " está inactivo");
         }
         return persona;
     }
