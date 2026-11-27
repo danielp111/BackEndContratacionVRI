@@ -21,4 +21,7 @@ public class PersonaJuridicaDTOPeticion extends TerceroDTOPeticion {
     /** Opcional. Si se envía, debe ser un tercero existente, activo y persona natural. */
     @Positive(message = "El representante legal debe ser un identificador válido")
     private Long representanteLegalId;
+
+    /** Unión temporal o consorcio (para el SIRECI). Si no se envía, falso. */
+    private Boolean esConsorcioUnionTemporal;
 }

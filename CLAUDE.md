@@ -176,17 +176,30 @@ Convenciones del modelo:
 - Carga inicial (`data.sql`, ids 1 a 32): las 30 clases de contrato de la hoja CONTROL (columna A, filas 290 a 319) y las 2 de convenio (filas 322 y 323: "1 CONTRATO / CONVENIO INTERADMINISTRATIVO" y "2 CONVENIO DE COOPERACIÓN (NACIONAL / INTERNACIONAL)"), con número y texto separados. Única corrección al texto del Excel: "COMISION" → "COMISIÓN".
 - El dominio de contratos valida la clase con `IClaseContratoServicio.obtenerClaseValida(id, actual)` (debe estar activa si cambia).
 
-**`catalogo_item`**: listas cortas en una sola tabla.
+**`catalogo`** y **`catalogo_item`**: listas cortas (dominio `catalogo`).
 
-| Campo | Tipo | Llave / regla |
+| `catalogo` | Tipo | Llave / regla |
 |---|---|---|
 | id | BIGINT | PK |
-| catalogo | VARCHAR(40) | TIPO_IDENTIFICACION, NATURALEZA, TIPO_SEGUIMIENTO, TIPO_ANTICIPO, TIPO_ADICION, FUENTE_FINANCIACION, ASEGURADORA |
-| codigo_sireci | VARCHAR(10) | Único por catálogo |
-| nombre | VARCHAR(150) | Se muestra como "código nombre" |
-| activo | BOOLEAN | |
+| codigo | VARCHAR(40) | Único, en mayúsculas (TIPO_IDENTIFICACION, ASEGURADORA). No cambia después de crear: el programa lo usa (`CodigoCatalogo`) |
+| nombre | VARCHAR(120) | Obligatorio |
+| descripcion | VARCHAR(300) | Opcional |
+| activo | BOOLEAN | Inactivo: sus ítems no se ofrecen (el selector queda vacío) ni se aceptan en registros nuevos |
 
-Carga inicial (`data.sql`): los tipos de identificación del SIRECI (CONTROL, lista TIPO DE DOCUMENTO): 1 NIT, 2 RUT - REGISTRO ÚNICO TRIBUTARIO, 3 CÉDULA DE CIUDADANÍA, 4 CÉDULA DE EXTRANJERÍA, sin ids fijos (clave natural catálogo + código). El 5 ("no se diligencia información...") no se carga: pertenece al reporte SIRECI.
+| `catalogo_item` | Tipo | Llave / regla |
+|---|---|---|
+| id | BIGINT | PK |
+| catalogo_id | BIGINT | FK `catalogo`. No cambia: un ítem no se mueve de catálogo (el catálogo va en la URL) |
+| codigo | VARCHAR(40) | Mnemónico que usa el programa (CC, NIT, SUPERVISOR), en mayúsculas. No cambia después de crear. Único por catálogo |
+| codigo_sireci | VARCHAR(10) | Opcional: el número que pide el SIRECI ("3" de "3 CÉDULA DE CIUDADANÍA"). Fuente de financiación y aseguradora no lo tienen |
+| nombre | VARCHAR(150) | Tal como se escribe (textos oficiales del SIRECI en mayúsculas, con tildes). Único por catálogo (sin mayúsculas ni tildes) |
+| orden | INT | Posición en los selectores, que se ordenan por orden y luego por nombre |
+| activo | BOOLEAN | Inactivo: no se ofrece en formularios nuevos; los registros existentes lo conservan |
+
+- La etiqueta es "código SIRECI + nombre" ("3 CÉDULA DE CIUDADANÍA") o solo el nombre si no hay código SIRECI.
+- **Validador reutilizable** `ICatalogoItemServicio.validarItem(itemId, codigoCatalogo)`: el ítem debe existir, pertenecer a ese catálogo, estar activo y su catálogo también; si no, 400. Las entidades que referencian ítems lo llaman **solo cuando el ítem se asigna o cambia** (tercero y abogado para `tipo_identificacion_id`; luego el contrato para seguimiento, anticipo, adición, fuente y aseguradora).
+- Carga inicial (`data.sql`, sin ids fijos: clave natural catálogo + código): desde la hoja CONTROL, TIPO_IDENTIFICACION (A348:A351: NIT, RUT, CC, CE), NATURALEZA (A341:A343: NATURAL, JURIDICA, CONSORCIO_UT), TIPO_SEGUIMIENTO (A356:A358: INTERVENTOR, SUPERVISOR, INTERVENTOR_SUPERVISOR), TIPO_ANTICIPO (A363:A365: ANTICIPO, PAGO_ANTICIPADO, NO_PACTADO), TIPO_ADICION (A369:A372: VALOR, TIEMPO, VALOR_TIEMPO, SIN_ADICION) y FUENTE_FINANCIACION (A455:A459: Funcionamiento, Inversión, SGR, Externos, Otro; sin código SIRECI). Se excluyen las opciones "no se diligencia información para este formulario en este período de reporte" (pertenecen al reporte SIRECI); "4 NO SE HA ADICIONADO..." sí es un valor real. ASEGURADORA no está en CONTROL: sale de la columna COMPAÑIA ASEGURADORA de los contratos, unificada en 4 (SEGUROS MUNDIAL, SEGUROS DEL ESTADO, SURA, ASEGURADORA SOLIDARIA DE COLOMBIA; las variantes "S.A", "SA" y sin "DE COLOMBIA" eran la misma); "N/A" (105 contratos) significa sin póliza y no se carga.
+- **Migración manual** `db/migracion-manual/2026-11-27-catalogo.sql`: pasa una base existente del modelo anterior (catálogo como texto en `catalogo_item.catalogo`) a este, conservando los ids. Una base nueva no la necesita. Ya se aplicó a la base de desarrollo.
 
 **`tercero`**: contratistas, supervisores, interventores, ordenadores, directores de proyecto y entidades financiadoras. Herencia JPA `JOINED`: los datos comunes en `tercero` y los propios en `persona_natural` o `persona_juridica` (PK = FK `tercero_id`).
 
@@ -204,13 +217,13 @@ Carga inicial (`data.sql`): los tipos de identificación del SIRECI (CONTROL, li
 | celular | VARCHAR(20) | |
 | activo | BOOLEAN | |
 
-El NIT se reconoce por el código SIRECI del tipo de identificación, configurado en `vri.tipo-identificacion.codigo-nit` (`1`, confirmado por la lista "TIPO DE DOCUMENTO" de la hoja CONTROL: "1 NIT"). Persona natural no admite NIT.
+El NIT se reconoce por el **código mnemónico** del tipo de identificación, configurado en `vri.tipo-identificacion.codigo-nit` (`NIT`; su código SIRECI es 1, según la lista "TIPO DE DOCUMENTO" de la hoja CONTROL). Persona natural no admite NIT.
 
 **`persona_natural`**: nombres VARCHAR(100) y apellidos VARCHAR(100) obligatorios; fecha_nacimiento DATE (pasada; la edad se calcula), ciudad_nacimiento VARCHAR(80), fecha_expedicion DATE (no anterior al nacimiento), lugar_expedicion VARCHAR(80), profesion VARCHAR(120), tarjeta_profesional VARCHAR(40), entidad_tarjeta VARCHAR(120), correo_institucional VARCHAR(120).
 
-**`persona_juridica`**: razon_social VARCHAR(200) obligatoria; representante_legal_id BIGINT opcional, FK a `persona_natural` (la base impide que sea jurídica). Al asignarlo o cambiarlo debe existir y estar activo.
+**`persona_juridica`**: razon_social VARCHAR(200) obligatoria; representante_legal_id BIGINT opcional, FK a `persona_natural` (la base impide que sea jurídica). Al asignarlo o cambiarlo debe existir y estar activo. es_consorcio_union_temporal BOOLEAN (falso por defecto).
 
-El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
+Naturaleza para el SIRECI (catálogo `NATURALEZA`): sale del tercero, sin guardarla aparte. Persona natural → 1 PERSONA NATURAL; persona jurídica → 2 PERSONA JURÍDICA, o 3 P JURÍDICA - UNIÓN TEMPORAL o CONSORCIO si `es_consorcio_union_temporal`. La columna discriminadora `naturaleza` (NATURAL/JURIDICA) no cambia.
 
 **`ordenador_gasto`**: periodo en que una persona natural firma contratos como ordenador del gasto (o su delegado) con un cargo (dominio `ordenador`). No repite datos personales: nombre y cédula vienen del tercero.
 
@@ -458,7 +471,7 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos), `clasecontrato` (clases SIRECI), `rubro` (rubros presupuestales) y `ordenador` (ordenadores del gasto). Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tablas `catalogo` y `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos), `clasecontrato` (clases SIRECI), `rubro` (rubros presupuestales) y `ordenador` (ordenadores del gasto). Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -476,7 +489,7 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Errores: `excepciones/ControladorExcepciones` devuelve siempre `ErrorRespuesta` (codigoError, mensaje, codigoHttp, url, metodo, fecha, errores por campo). Lanzar `EntidadNoExisteException` (404), `EntidadYaExisteException` (409) o `ReglaNegocioException` (400) desde los servicios.
 - Las entidades de negocio extienden `comun/accesoADatos/EntidadAuditable`, que trae `creado_en/por` y `actualizado_en/por` llenados por JPA Auditing (`configuracion/ConfiguracionAuditoria`); `*_por` queda nulo hasta que exista el login.
 - Relaciones entre dominios: el DTOPeticion recibe el id (`usuarioId`, `dependenciaId`…); el servicio la valida con el método `obtener…Valido` del servicio del otro dominio (existe, está activa, pertenece al catálogo correcto) y la asigna. ModelMapper no copia relaciones: en el TypeMap de la petición se hacen `skip` de los setters de relación. Al actualizar, solo se exige que esté activo un valor que cambia.
-- Textos: Jackson normaliza todo texto al leer el JSON, antes de `@Valid` (`configuracion/ConfiguracionJackson`): recorta, colapsa espacios horizontales repetidos y convierte `""` en `null`. Cada servicio termina la limpieza con `comun/utilidades/Textos` (correos en minúsculas; documentos y nombres de `catalogo_item` en mayúsculas). Los nombres que se muestran al usuario y en reportes (dependencias, tipos de contrato, clases SIRECI, rubros, terceros, proyectos) se guardan tal como se escriben, con tildes; la collation evita duplicados por mayúsculas o tildes.
+- Textos: Jackson normaliza todo texto al leer el JSON, antes de `@Valid` (`configuracion/ConfiguracionJackson`): recorta, colapsa espacios horizontales repetidos y convierte `""` en `null`. Cada servicio termina la limpieza con `comun/utilidades/Textos` (correos en minúsculas; documentos y códigos en mayúsculas). Los nombres que se muestran al usuario y en reportes (dependencias, tipos de contrato, clases SIRECI, rubros, terceros, proyectos) se guardan tal como se escriben, con tildes; la collation evita duplicados por mayúsculas o tildes.
 - Búsquedas paginadas: devuelven `comun/fachadaServicios/PaginaRespuesta` (contenido, pagina, tamanio, totalElementos, totalPaginas, primera, ultima), con parámetros `pagina` (desde 0) y `tamanio` (1 a 100) y orden fijo definido por el servicio. Los comodines de LIKE del usuario se escapan con `!`.
 - Proyectos: `POST /api/proyectos` (con `idProyecto`), `GET/PUT /api/proyectos/{idProyecto}` (un `idProyecto` distinto en el cuerpo da 400), `PATCH /{idProyecto}/estado`, `GET /api/proyectos?id=&nombre=&director=&activo=&pagina=&tamanio=` y `GET /api/proyectos/activos?texto=` para selectores. Los demás dominios validan un proyecto con `IProyectoServicio.obtenerProyectoValido(id, exigirActivo)`.
 - Personas naturales asignadas (representante legal, director, y luego supervisor o contratista): validar con `ITerceroServicio.obtenerPersonaNaturalValida(id, actual, rol)`.
@@ -485,6 +498,7 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Clases de contrato SIRECI: `GET /api/clases-contrato?ambito=&activo=` (con `activo=true` para selectores; orden por ámbito y código), `GET/PUT /api/clases-contrato/{id}` (PUT solo cambia el nombre; un código o ámbito distinto en el cuerpo da 400), `POST /api/clases-contrato` y `PATCH /{id}/estado`.
 - Rubros presupuestales: `GET /api/rubros?texto=&activo=&pagina=&tamanio=` (`texto` = prefijo del código o contenido del nombre; con `activo=true` para selectores; orden numérico por código), `GET/PUT /api/rubros/{id}` (el código no cambia si hay contratos: 400; si choca con otro: 409), `POST /api/rubros` y `PATCH /{id}/estado`. Respuesta con `codigo`, `nombre`, `etiqueta` ("1052002 - Museo de Historia Natural") y `codigoEditable`.
 - Ordenadores del gasto: `GET /api/ordenadores-gasto?vigenteEn=AAAA-MM-DD&texto=&activo=` (`vigenteEn` para los selectores del contrato: periodos activos que cubren esa fecha; `texto` = nombre, cédula o cargo), `GET/PUT /api/ordenadores-gasto/{id}`, `POST /api/ordenadores-gasto`, `PATCH /{id}/cerrar` con `{"fechaHasta": ...}` y `PATCH /{id}/estado`.
+- Catálogos: `GET /api/catalogos?activo=`, `GET/PUT /api/catalogos/{codigo}` (un código distinto en el cuerpo da 400), `POST /api/catalogos` y `PATCH /{codigo}/estado`. Ítems: `GET /api/catalogos/{codigo}/items?activo=true` (selectores), `GET/PUT /api/catalogos/{codigo}/items/{id}` (un ítem de otro catálogo da 404; un código distinto en el cuerpo da 400), `POST /api/catalogos/{codigo}/items` y `PATCH /{id}/estado`. Ya no existe `/api/catalogo-items`.
 - Errores HTTP: 400 (validación o regla de negocio), 404 (no existe), 409 (duplicado), 415 (cuerpo que no es `application/json`).
 - No hay borrado físico de maestros: se usa `PATCH /{id}/estado?activo=`.
 - MySQL local: `docker compose up -d` (MySQL 8.4 en el puerto 3306, base `contratacion_vri`). Las pruebas usan H2 en memoria y no necesitan Docker.

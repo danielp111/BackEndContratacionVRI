@@ -32,6 +32,14 @@ public class PersonaJuridicaEntity extends TerceroEntity {
             foreignKey = @ForeignKey(name = "fk_persona_juridica_representante"))
     private PersonaNaturalEntity representanteLegal;
 
+    /**
+     * Unión temporal o consorcio. El SIRECI distingue tres naturalezas (catálogo NATURALEZA):
+     * 1 persona natural, 2 persona jurídica, 3 persona jurídica - unión temporal o consorcio; esta
+     * marca da la tercera sin cambiar la columna discriminadora.
+     */
+    @Column(name = "es_consorcio_union_temporal", nullable = false)
+    private Boolean esConsorcioUnionTemporal = Boolean.FALSE;
+
     public PersonaJuridicaEntity() {
         super(Naturaleza.JURIDICA);
     }

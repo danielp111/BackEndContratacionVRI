@@ -20,7 +20,7 @@ import org.springframework.http.MediaType;
 import co.edu.unicauca.contratacionvri.PruebaIntegracionBase;
 import co.edu.unicauca.contratacionvri.abogado.accesoADatos.modelos.TipoVinculacion;
 import co.edu.unicauca.contratacionvri.abogado.fachadaServicios.DTOPeticion.AbogadoDTOPeticion;
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CodigoCatalogo;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.Rol;
@@ -35,7 +35,7 @@ class AbogadoRestControllerTest extends PruebaIntegracionBase {
 
     @BeforeEach
     void datosBase() {
-        cedula = item(Catalogo.TIPO_IDENTIFICACION, "3", "CÉDULA DE CIUDADANÍA");
+        cedula = item(CodigoCatalogo.TIPO_IDENTIFICACION, "CC", "3", "CÉDULA DE CIUDADANÍA");
         juridica = dependencia("OFICINA JURÍDICA");
     }
 
@@ -85,7 +85,7 @@ class AbogadoRestControllerTest extends PruebaIntegracionBase {
     void rechazaRelacionesInvalidas() throws Exception {
         UsuarioEntity financiero = usuario("fin@unicauca.edu.co", Rol.FINANCIERO);
         UsuarioEntity u = abogadoUsuario("ana@unicauca.edu.co");
-        CatalogoItemEntity naturaleza = item(Catalogo.NATURALEZA, "1", "PERSONA NATURAL");
+        CatalogoItemEntity naturaleza = item(CodigoCatalogo.NATURALEZA, "NATURAL", "1", "PERSONA NATURAL");
 
         // El usuario no tiene rol ABOGADO.
         mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)

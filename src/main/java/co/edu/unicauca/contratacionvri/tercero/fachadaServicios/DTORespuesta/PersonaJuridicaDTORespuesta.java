@@ -10,6 +10,7 @@ import lombok.Setter;
 public class PersonaJuridicaDTORespuesta extends TerceroDTORespuesta {
 
     private String razonSocial;
+    private Boolean esConsorcioUnionTemporal;
     private Long representanteLegalId;
     private String representanteLegalNombre;
     private String representanteLegalDocumento;

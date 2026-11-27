@@ -14,9 +14,10 @@ import co.edu.unicauca.contratacionvri.abogado.accesoADatos.repositorios.Abogado
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.AmbitoClase;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.ClaseContratoEntity;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.repositorios.ClaseContratoRepositorio;
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoEntity;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoItemRepositorio;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoRepositorio;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
 import co.edu.unicauca.contratacionvri.proyecto.accesoADatos.repositorios.ProyectoRepositorio;
@@ -58,6 +59,9 @@ public abstract class PruebaIntegracionBase {
 
     @Autowired
     protected CatalogoItemRepositorio catalogoRepositorio;
+
+    @Autowired
+    protected CatalogoRepositorio catalogosRepositorio;
 
     @Autowired
     protected DependenciaRepositorio dependenciaRepositorio;
@@ -106,6 +110,7 @@ public abstract class PruebaIntegracionBase {
         abogadoRepositorio.deleteAll();
         usuarioRepositorio.deleteAll();
         catalogoRepositorio.deleteAll();
+        catalogosRepositorio.deleteAll();
         dependenciaRepositorio.deleteAll();
     }
 
@@ -118,11 +123,16 @@ public abstract class PruebaIntegracionBase {
         return usuarioRepositorio.save(u);
     }
 
-    protected CatalogoItemEntity item(Catalogo catalogo, String codigo, String nombre) {
-        CatalogoItemEntity i = new CatalogoItemEntity();
-        i.setCatalogo(catalogo);
-        i.setCodigoSireci(codigo);
-        i.setNombre(nombre);
+    /** El catálogo con ese código; lo crea si no existe. */
+    protected CatalogoEntity catalogo(String codigo) {
+        return catalogosRepositorio.findByCodigo(codigo)
+                .orElseGet(() -> catalogosRepositorio.save(new CatalogoEntity(codigo, "Catálogo " + codigo)));
+    }
+
+    /** Ítem activo del catálogo (que se crea si no existe), con su código mnemónico y su código SIRECI. */
+    protected CatalogoItemEntity item(String codigoCatalogo, String codigo, String codigoSireci, String nombre) {
+        CatalogoItemEntity i = new CatalogoItemEntity(catalogo(codigoCatalogo), codigo, nombre);
+        i.setCodigoSireci(codigoSireci);
         i.setActivo(true);
         return catalogoRepositorio.save(i);
     }

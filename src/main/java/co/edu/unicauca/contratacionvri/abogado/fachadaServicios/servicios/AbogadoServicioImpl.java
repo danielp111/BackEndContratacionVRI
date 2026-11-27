@@ -11,7 +11,7 @@ import co.edu.unicauca.contratacionvri.abogado.accesoADatos.modelos.AbogadoEntit
 import co.edu.unicauca.contratacionvri.abogado.accesoADatos.repositorios.AbogadoRepositorio;
 import co.edu.unicauca.contratacionvri.abogado.fachadaServicios.DTOPeticion.AbogadoDTOPeticion;
 import co.edu.unicauca.contratacionvri.abogado.fachadaServicios.DTORespuesta.AbogadoDTORespuesta;
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CodigoCatalogo;
 import co.edu.unicauca.contratacionvri.catalogo.fachadaServicios.servicios.ICatalogoItemServicio;
 import co.edu.unicauca.contratacionvri.comun.utilidades.Textos;
 import co.edu.unicauca.contratacionvri.dependencia.fachadaServicios.servicios.IDependenciaServicio;
@@ -131,8 +131,8 @@ public class AbogadoServicioImpl implements IAbogadoServicio {
         Long tipoActual = abogado.getTipoIdentificacion() == null ? null : abogado.getTipoIdentificacion().getId();
         boolean tipoCambia = esNuevo || !Objects.equals(tipoActual, peticion.getTipoIdentificacionId());
         if (tipoCambia) {
-            abogado.setTipoIdentificacion(catalogoServicio.obtenerItemValido(
-                    peticion.getTipoIdentificacionId(), Catalogo.TIPO_IDENTIFICACION, true, "tipo de identificación"));
+            abogado.setTipoIdentificacion(catalogoServicio.validarItem(
+                    peticion.getTipoIdentificacionId(), CodigoCatalogo.TIPO_IDENTIFICACION));
         }
 
         Long dependenciaActual = abogado.getDependencia() == null ? null : abogado.getDependencia().getId();

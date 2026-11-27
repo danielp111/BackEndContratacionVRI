@@ -9,7 +9,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CodigoCatalogo;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.catalogo.fachadaServicios.servicios.ICatalogoItemServicio;
 import co.edu.unicauca.contratacionvri.comun.fachadaServicios.PaginaRespuesta;
@@ -35,8 +35,6 @@ import co.edu.unicauca.contratacionvri.tercero.fachadaServicios.DTORespuesta.Ter
 @Transactional(readOnly = true)
 public class TerceroServicioImpl implements ITerceroServicio {
 
-    private static final String CAMPO_TIPO = "tipo de identificación";
-
     private final TerceroRepositorio repositorio;
     private final ICatalogoItemServicio catalogoServicio;
     private final ModelMapper modelMapper;
@@ -44,7 +42,7 @@ public class TerceroServicioImpl implements ITerceroServicio {
 
     public TerceroServicioImpl(TerceroRepositorio repositorio, ICatalogoItemServicio catalogoServicio,
                                ModelMapper modelMapper,
-                               @Value("${vri.tipo-identificacion.codigo-nit:1}") String codigoNit) {
+                               @Value("${vri.tipo-identificacion.codigo-nit:NIT}") String codigoNit) {
         this.repositorio = repositorio;
         this.catalogoServicio = catalogoServicio;
         this.modelMapper = modelMapper;
@@ -95,6 +93,7 @@ public class TerceroServicioImpl implements ITerceroServicio {
     @Transactional
     public PersonaJuridicaDTORespuesta crearPersonaJuridica(PersonaJuridicaDTOPeticion peticion) {
         normalizarComunes(peticion);
+        peticion.setEsConsorcioUnionTemporal(Boolean.TRUE.equals(peticion.getEsConsorcioUnionTemporal()));
 
         CatalogoItemEntity tipo = obtenerTipoIdentificacion(null, peticion.getTipoIdentificacionId());
         validarDocumento(tipo, peticion.getNumeroDocumento(), Naturaleza.JURIDICA, null);
@@ -150,6 +149,7 @@ public class TerceroServicioImpl implements ITerceroServicio {
             throw naturalezaNoCambia(id, Naturaleza.NATURAL, Naturaleza.JURIDICA);
         }
         normalizarComunes(peticion);
+        peticion.setEsConsorcioUnionTemporal(Boolean.TRUE.equals(peticion.getEsConsorcioUnionTemporal()));
 
         CatalogoItemEntity tipo = obtenerTipoIdentificacion(persona.getTipoIdentificacion(), peticion.getTipoIdentificacionId());
         validarDocumento(tipo, peticion.getNumeroDocumento(), Naturaleza.JURIDICA, id);
@@ -178,11 +178,12 @@ public class TerceroServicioImpl implements ITerceroServicio {
         if (actual != null && Objects.equals(actual.getId(), tipoId)) {
             return actual;
         }
-        return catalogoServicio.obtenerItemValido(tipoId, Catalogo.TIPO_IDENTIFICACION, true, CAMPO_TIPO);
+        return catalogoServicio.validarItem(tipoId, CodigoCatalogo.TIPO_IDENTIFICACION);
     }
 
+    /** El NIT se reconoce por el código mnemónico del ítem (vri.tipo-identificacion.codigo-nit = NIT). */
     private boolean esNit(CatalogoItemEntity tipo) {
-        return codigoNit.equalsIgnoreCase(tipo.getCodigoSireci());
+        return codigoNit.equalsIgnoreCase(tipo.getCodigo());
     }
 
     /** Persona natural sin NIT, formato del NIT y unicidad de (tipo, número). */

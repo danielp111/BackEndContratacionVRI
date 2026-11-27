@@ -80,11 +80,10 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/catalogo-items?catalogo=TIPO_IDENTIFICACION&activo=true",
+              "raw": "{{baseUrl}}/catalogos/TIPO_IDENTIFICACION/items?activo=true",
               "host": ["{{baseUrl}}"],
-              "path": ["catalogo-items"],
+              "path": ["catalogos", "TIPO_IDENTIFICACION", "items"],
               "query": [
-                { "key": "catalogo", "value": "TIPO_IDENTIFICACION" },
                 { "key": "activo", "value": "true" }
               ]
             }

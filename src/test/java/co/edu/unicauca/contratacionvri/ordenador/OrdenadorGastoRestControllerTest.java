@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import co.edu.unicauca.contratacionvri.PruebaIntegracionBase;
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CodigoCatalogo;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.excepciones.excepcionesPropias.ReglaNegocioException;
 import co.edu.unicauca.contratacionvri.ordenador.accesoADatos.modelos.OrdenadorGastoEntity;
@@ -57,7 +57,7 @@ class OrdenadorGastoRestControllerTest extends PruebaIntegracionBase {
 
     @BeforeEach
     void personas() {
-        cedula = item(Catalogo.TIPO_IDENTIFICACION, "3", "CÉDULA DE CIUDADANÍA");
+        cedula = item(CodigoCatalogo.TIPO_IDENTIFICACION, "CC", "3", "CÉDULA DE CIUDADANÍA");
         pino = personaNatural("76314448", "FRANCISCO JOSE", "PINO CORREA");
         hurtado = personaNatural("76311561", "DEIBAR RENE", "HURTADO HERRERA");
     }

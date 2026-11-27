@@ -15,7 +15,7 @@ import org.springframework.http.MediaType;
 import co.edu.unicauca.contratacionvri.PruebaIntegracionBase;
 import co.edu.unicauca.contratacionvri.abogado.accesoADatos.modelos.TipoVinculacion;
 import co.edu.unicauca.contratacionvri.abogado.fachadaServicios.DTOPeticion.AbogadoDTOPeticion;
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CodigoCatalogo;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.Rol;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.UsuarioEntity;
 import co.edu.unicauca.contratacionvri.usuario.fachadaServicios.DTOPeticion.UsuarioDTOPeticion;
@@ -58,7 +58,7 @@ class UsuarioRestControllerTest extends PruebaIntegracionBase {
     @Test
     void noPermiteQuitarRolAbogadoSiTieneDatosDeAbogado() throws Exception {
         long id = crear(URL, new UsuarioDTOPeticion("abog@unicauca.edu.co", "Abogado", Rol.ABOGADO));
-        long cedula = item(Catalogo.TIPO_IDENTIFICACION, "3", "CÉDULA DE CIUDADANÍA").getId();
+        long cedula = item(CodigoCatalogo.TIPO_IDENTIFICACION, "CC", "3", "CÉDULA DE CIUDADANÍA").getId();
         crear("/api/abogados", AbogadoDTOPeticion.builder()
                 .usuarioId(id).tipoIdentificacionId(cedula).numeroDocumento("123")
                 .nombres("A").apellidos("B").tipoVinculacion(TipoVinculacion.PLANTA)
