@@ -19,7 +19,9 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.AmbitoClase;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.ClaseContratoEntity;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.repositorios.ClaseContratoRepositorio;
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoEntity;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CodigoCatalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoRepositorio;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoItemRepositorio;
 import co.edu.unicauca.contratacionvri.ordenador.accesoADatos.modelos.OrdenadorGastoEntity;
@@ -73,6 +75,9 @@ class CargaInicialTest {
 
     @Autowired
     private CatalogoItemRepositorio catalogo;
+
+    @Autowired
+    private CatalogoRepositorio catalogos;
 
     @Autowired
     private TerceroRepositorio terceros;
@@ -333,10 +338,56 @@ class CargaInicialTest {
                 .map(PersonaNaturalEntity.class::cast).findFirst().orElseThrow();
     }
 
+    private java.util.List<CatalogoItemEntity> itemsDe(String codigoCatalogo) {
+        return catalogo.buscar(catalogos.findByCodigo(codigoCatalogo).orElseThrow().getId(), null);
+    }
+
+    /** Los 7 catálogos con sus ítems exactos, sin las opciones de "no se diligencia". */
+    @Test
+    @Order(16)
+    @org.springframework.transaction.annotation.Transactional
+    void cargaLos7CatalogosConSusItems() {
+        assertThat(catalogos.findAll()).extracting(CatalogoEntity::getCodigo).containsExactlyInAnyOrder(
+                "TIPO_IDENTIFICACION", "NATURALEZA", "TIPO_SEGUIMIENTO", "TIPO_ANTICIPO", "TIPO_ADICION",
+                "FUENTE_FINANCIACION", "ASEGURADORA");
+        assertThat(itemsDe(CodigoCatalogo.TIPO_IDENTIFICACION)).extracting(CatalogoItemEntity::getCodigo)
+                .containsExactly("NIT", "RUT", "CC", "CE");
+        assertThat(itemsDe(CodigoCatalogo.NATURALEZA)).extracting(CatalogoItemEntity::getEtiqueta)
+                .containsExactly("1 PERSONA NATURAL", "2 PERSONA JURÍDICA", "3 P JURÍDICA - UNIÓN TEMPORAL o CONSORCIO");
+        assertThat(itemsDe(CodigoCatalogo.TIPO_SEGUIMIENTO)).extracting(CatalogoItemEntity::getCodigo)
+                .containsExactly("INTERVENTOR", "SUPERVISOR", "INTERVENTOR_SUPERVISOR");
+        assertThat(itemsDe(CodigoCatalogo.TIPO_ANTICIPO)).extracting(CatalogoItemEntity::getEtiqueta)
+                .containsExactly("1 ANTICIPOS", "2 PAGO ANTICIPADO", "3 NO PACTADOS");
+        assertThat(itemsDe(CodigoCatalogo.TIPO_ADICION)).extracting(CatalogoItemEntity::getCodigo)
+                .containsExactly("VALOR", "TIEMPO", "VALOR_TIEMPO", "SIN_ADICION");
+        assertThat(itemsDe(CodigoCatalogo.FUENTE_FINANCIACION)).extracting(CatalogoItemEntity::getEtiqueta)
+                .containsExactly("Funcionamiento", "Inversión", "SGR", "Externos", "Otro");
+        assertThat(itemsDe(CodigoCatalogo.FUENTE_FINANCIACION)).allMatch(i -> i.getCodigoSireci() == null);
+        assertThat(itemsDe(CodigoCatalogo.ASEGURADORA)).extracting(CatalogoItemEntity::getNombre).containsExactly(
+                "SEGUROS MUNDIAL", "SEGUROS DEL ESTADO", "SURA", "ASEGURADORA SOLIDARIA DE COLOMBIA");
+        // Ninguna opción de "no se diligencia", ni "N/A" como aseguradora.
+        assertThat(catalogo.findAll()).noneMatch(i -> i.getNombre().contains("NO SE DILIGENCIA") || i.getNombre().equals("N/A"));
+    }
+
+    @Test
+    @Order(17)
+    void volverACargarNoDuplicaCatalogosNiItemsNiReactiva() {
+        CatalogoItemEntity sura = itemsDe(CodigoCatalogo.ASEGURADORA).stream()
+                .filter(i -> i.getCodigo().equals("SURA")).findFirst().orElseThrow();
+        sura.setActivo(false);
+        catalogo.save(sura);
+
+        volverACargarDataSql();
+
+        assertThat(catalogos.count()).isEqualTo(7);
+        assertThat(catalogo.count()).isEqualTo(4 + 3 + 3 + 3 + 4 + 5 + 4);
+        assertThat(catalogo.findById(sura.getId()).orElseThrow().getActivo()).as("no se reactiva").isFalse();
+    }
+
     @Test
     @Order(13)
     void cargaLosTiposDeIdentificacionSinElDeNoDiligencia() {
-        assertThat(catalogo.buscar(Catalogo.TIPO_IDENTIFICACION, null)).extracting(CatalogoItemEntity::getEtiqueta)
+        assertThat(itemsDe(CodigoCatalogo.TIPO_IDENTIFICACION)).extracting(CatalogoItemEntity::getEtiqueta)
                 .containsExactly("1 NIT", "2 RUT - REGISTRO ÚNICO TRIBUTARIO", "3 CÉDULA DE CIUDADANÍA", "4 CÉDULA DE EXTRANJERÍA");
     }
 
@@ -387,7 +438,7 @@ class CargaInicialTest {
 
         assertThat(terceros.count()).isEqualTo(8);
         assertThat(ordenadores.count()).isEqualTo(2);
-        assertThat(catalogo.buscar(Catalogo.TIPO_IDENTIFICACION, null)).hasSize(4);
+        assertThat(itemsDe(CodigoCatalogo.TIPO_IDENTIFICACION)).hasSize(4);
         assertThat(personaPorCedula("76314448").getNombres()).as("no revierte la corrección").isEqualTo("FRANCISCO JOSÉ");
         assertThat(ordenadores.findById(rector.getId()).orElseThrow().getFechaHasta()).isEqualTo(java.time.LocalDate.of(2026, 12, 31));
     }

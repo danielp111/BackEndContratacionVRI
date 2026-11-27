@@ -69,10 +69,10 @@
                   "    pm.collectionVariables.set('tipoNitId', nit.id);",
                   "} else {",
                   "    pm.sendRequest({",
-                  "        url: pm.collectionVariables.get('baseUrl') + '/catalogo-items',",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/catalogos/TIPO_IDENTIFICACION/items',",
                   "        method: 'POST',",
                   "        header: { 'Content-Type': 'application/json' },",
-                  "        body: { mode: 'raw', raw: JSON.stringify({ catalogo: 'TIPO_IDENTIFICACION', codigoSireci: codigo, nombre: 'NIT' }) }",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ codigo: 'NIT', codigoSireci: codigo, nombre: 'NIT' }) }",
                   "    }, (err, res) => {",
                   "        pm.test('Crea el tipo NIT', () => pm.expect(res.code).to.eql(201));",
                   "        pm.collectionVariables.set('tipoNitId', res.json().id);",
@@ -86,11 +86,10 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/catalogo-items?catalogo=TIPO_IDENTIFICACION&activo=true",
+              "raw": "{{baseUrl}}/catalogos/TIPO_IDENTIFICACION/items?activo=true",
               "host": ["{{baseUrl}}"],
-              "path": ["catalogo-items"],
+              "path": ["catalogos", "TIPO_IDENTIFICACION", "items"],
               "query": [
-                { "key": "catalogo", "value": "TIPO_IDENTIFICACION" },
                 { "key": "activo", "value": "true" }
               ]
             }
@@ -110,10 +109,10 @@
                   "    pm.collectionVariables.set('tipoCedulaId', cedula.id);",
                   "} else {",
                   "    pm.sendRequest({",
-                  "        url: pm.collectionVariables.get('baseUrl') + '/catalogo-items',",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/catalogos/TIPO_IDENTIFICACION/items',",
                   "        method: 'POST',",
                   "        header: { 'Content-Type': 'application/json' },",
-                  "        body: { mode: 'raw', raw: JSON.stringify({ catalogo: 'TIPO_IDENTIFICACION', codigoSireci: '3', nombre: 'CÉDULA DE CIUDADANÍA' }) }",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ codigo: 'CC', codigoSireci: '3', nombre: 'CÉDULA DE CIUDADANÍA' }) }",
                   "    }, (err, res) => {",
                   "        pm.test('Crea el tipo cédula', () => pm.expect(res.code).to.eql(201));",
                   "        pm.collectionVariables.set('tipoCedulaId', res.json().id);",
@@ -127,11 +126,10 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/catalogo-items?catalogo=TIPO_IDENTIFICACION&activo=true",
+              "raw": "{{baseUrl}}/catalogos/TIPO_IDENTIFICACION/items?activo=true",
               "host": ["{{baseUrl}}"],
-              "path": ["catalogo-items"],
+              "path": ["catalogos", "TIPO_IDENTIFICACION", "items"],
               "query": [
-                { "key": "catalogo", "value": "TIPO_IDENTIFICACION" },
                 { "key": "activo", "value": "true" }
               ]
             }

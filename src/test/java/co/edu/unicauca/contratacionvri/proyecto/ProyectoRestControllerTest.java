@@ -23,7 +23,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
 import co.edu.unicauca.contratacionvri.PruebaIntegracionBase;
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CodigoCatalogo;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.excepciones.excepcionesPropias.ReglaNegocioException;
 import co.edu.unicauca.contratacionvri.proyecto.accesoADatos.modelos.ProyectoEntity;
@@ -46,7 +46,7 @@ class ProyectoRestControllerTest extends PruebaIntegracionBase {
 
     @BeforeEach
     void datosBase() {
-        cedula = item(Catalogo.TIPO_IDENTIFICACION, "3", "CÉDULA DE CIUDADANÍA");
+        cedula = item(CodigoCatalogo.TIPO_IDENTIFICACION, "CC", "3", "CÉDULA DE CIUDADANÍA");
         carlos = personaNatural("1061000111", "Carlos", "Ruiz");
         ana = personaNatural("94000222", "Ana", "Zapata");
     }

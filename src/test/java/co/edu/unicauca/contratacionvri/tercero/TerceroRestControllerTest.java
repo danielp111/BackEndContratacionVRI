@@ -21,7 +21,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
 import co.edu.unicauca.contratacionvri.PruebaIntegracionBase;
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CodigoCatalogo;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaNaturalEntity;
 import co.edu.unicauca.contratacionvri.tercero.fachadaServicios.DTOPeticion.PersonaJuridicaDTOPeticion;
@@ -43,9 +43,9 @@ class TerceroRestControllerTest extends PruebaIntegracionBase {
     @BeforeEach
     void catalogos() {
         // El código "1" es el configurado como NIT (vri.tipo-identificacion.codigo-nit).
-        nit = item(Catalogo.TIPO_IDENTIFICACION, "1", "NIT");
-        cedula = item(Catalogo.TIPO_IDENTIFICACION, "3", "CÉDULA DE CIUDADANÍA");
-        extranjeria = item(Catalogo.TIPO_IDENTIFICACION, "4", "CÉDULA DE EXTRANJERÍA");
+        nit = item(CodigoCatalogo.TIPO_IDENTIFICACION, "NIT", "1", "NIT");
+        cedula = item(CodigoCatalogo.TIPO_IDENTIFICACION, "CC", "3", "CÉDULA DE CIUDADANÍA");
+        extranjeria = item(CodigoCatalogo.TIPO_IDENTIFICACION, "CE", "4", "CÉDULA DE EXTRANJERÍA");
     }
 
     // ------------------------------------------------------------------ utilidades
@@ -113,6 +113,40 @@ class TerceroRestControllerTest extends PruebaIntegracionBase {
         }
 
         @Test
+        void marcaDeConsorcioOUnionTemporalSoloEnPersonaJuridica() throws Exception {
+            enviar("POST", JURIDICAS, juridica(NIT_DIAN, "DIAN"))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.esConsorcioUnionTemporal").value(false));
+
+            PersonaJuridicaDTOPeticion consorcio = juridica("890903938", "Consorcio Vías del Cauca");
+            consorcio.setEsConsorcioUnionTemporal(true);
+            long id = crear(JURIDICAS, consorcio);
+            mvc.perform(get(URL + "/" + id)).andExpect(jsonPath("$.esConsorcioUnionTemporal").value(true));
+
+            // Al actualizar sin enviarla, queda en falso (PUT reemplaza).
+            enviar("PUT", JURIDICAS + "/" + id, juridica("890903938", "Vías del Cauca SAS"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.esConsorcioUnionTemporal").value(false));
+            // La persona natural no tiene esa marca.
+            long natural = crear(NATURALES, natural("1061000", "Ana", "Pérez"));
+            mvc.perform(get(URL + "/" + natural)).andExpect(jsonPath("$.esConsorcioUnionTemporal").doesNotExist());
+        }
+
+        @Test
+        void elNitSeReconocePorSuCodigoMnemonicoNoPorElNumeroSireci() throws Exception {
+            // Un NIT con otro código SIRECI sigue siendo NIT: el programa usa el código "NIT".
+            nit.setCodigoSireci("99");
+            catalogoRepositorio.save(nit);
+            enviar("POST", JURIDICAS, juridica(NIT_DIAN, "DIAN")).andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.dv").value("4"));
+            // Y un ítem con código SIRECI "1" pero otro mnemónico no se trata como NIT.
+            CatalogoItemEntity otro = item(CodigoCatalogo.TIPO_IDENTIFICACION, "OTRO", "1", "OTRO DOCUMENTO");
+            PersonaNaturalDTOPeticion p = natural("123456", "Ana", "Pérez");
+            p.setTipoIdentificacionId(otro.getId());
+            enviar("POST", NATURALES, p).andExpect(status().isCreated()).andExpect(jsonPath("$.dv").value(nullValue()));
+        }
+
+        @Test
         void personaJuridicaConNitCalculaElDvEIgnoraDvYNaturalezaEnviados() throws Exception {
             String cuerpo = """
                     {"tipoIdentificacionId": %d, "numeroDocumento": "%s", "razonSocial": "Dirección de Impuestos",
@@ -147,7 +181,7 @@ class TerceroRestControllerTest extends PruebaIntegracionBase {
 
         @Test
         void tipoDeIdentificacionDebeSerDelCatalogoCorrectoYActivo() throws Exception {
-            CatalogoItemEntity naturaleza = item(Catalogo.NATURALEZA, "1", "PERSONA NATURAL");
+            CatalogoItemEntity naturaleza = item(CodigoCatalogo.NATURALEZA, "NATURAL", "1", "PERSONA NATURAL");
             PersonaNaturalDTOPeticion p = natural("1001", "Ana", "Pérez");
             p.setTipoIdentificacionId(naturaleza.getId());
             enviar("POST", NATURALES, p).andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigoError").value("GC-0004"));
@@ -156,7 +190,7 @@ class TerceroRestControllerTest extends PruebaIntegracionBase {
             catalogoRepositorio.save(extranjeria);
             p.setTipoIdentificacionId(extranjeria.getId());
             enviar("POST", NATURALES, p).andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.mensaje").value("El tipo de identificación '4 CÉDULA DE EXTRANJERÍA' está inactivo"));
+                    .andExpect(jsonPath("$.mensaje").value("El ítem '4 CÉDULA DE EXTRANJERÍA' del catálogo TIPO_IDENTIFICACION está inactivo"));
         }
     }
 

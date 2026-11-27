@@ -1,0 +1,770 @@
+{
+  "info": {
+    "name": "Contratación VRI - Catálogos genéricos",
+    "description": "Pruebas de los catálogos de listas cortas (catalogo y catalogo_item). Ejecutar COMPLETA y EN ORDEN con el Collection Runner o con newman: cada petición usa los datos que guardó la anterior.\n\nLa carpeta 00 verifica la carga inicial (data.sql): los 7 catálogos, los códigos mnemónicos y SIRECI, las aseguradoras unificadas y la exclusión de las opciones \"no se diligencia\".\n\nCada ejecución crea un catálogo de prueba propio (PRUEBA_ y un sufijo único) con 3 ítems; al final lo deja INACTIVO, así sus ítems no aparecen en ningún selector.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "sufijo", "value": "" },
+    { "key": "catalogo", "value": "" },
+    { "key": "ccId", "value": "" },
+    { "key": "alfaId", "value": "" },
+    { "key": "betaId", "value": "" },
+    { "key": "gammaId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Carga inicial",
+      "item": [
+        {
+          "name": "Los 7 catálogos",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catálogo de prueba propio de esta ejecución.",
+                  "const sufijo = Date.now().toString().slice(-8);",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('catalogo', 'PRUEBA_' + sufijo);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const codigos = pm.response.json().map(c => c.codigo);",
+                  "pm.test('Están los 7 catálogos de la carga inicial', () => {",
+                  "    for (const c of ['TIPO_IDENTIFICACION', 'NATURALEZA', 'TIPO_SEGUIMIENTO', 'TIPO_ANTICIPO', 'TIPO_ADICION', 'FUENTE_FINANCIACION', 'ASEGURADORA']) {",
+                  "        pm.expect(codigos).to.include(c);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Tipos de identificación: código mnemónico, código SIRECI y orden",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('Ordenados por el código SIRECI: NIT, RUT, CC, CE', () => pm.expect(items.map(i => i.codigo)).to.eql(['NIT', 'RUT', 'CC', 'CE']));",
+                  "const cc = items.find(i => i.codigo === 'CC');",
+                  "pm.test('CC tiene código SIRECI 3 y su etiqueta', () => {",
+                  "    pm.expect(cc.codigoSireci).to.eql('3');",
+                  "    pm.expect(cc.etiqueta).to.eql('3 CÉDULA DE CIUDADANÍA');",
+                  "    pm.expect(cc.catalogo).to.eql('TIPO_IDENTIFICACION');",
+                  "});",
+                  "pm.test('Sin la opción \"no se diligencia\"', () => pm.expect(items.some(i => i.nombre.includes('NO SE DILIGENCIA'))).to.be.false);",
+                  "pm.collectionVariables.set('ccId', cc.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/TIPO_IDENTIFICACION/items?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "TIPO_IDENTIFICACION", "items"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Naturaleza: incluye unión temporal o consorcio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Las 3 naturalezas del SIRECI', () => pm.expect(pm.response.json().map(i => i.etiqueta)).to.eql([",
+                  "    '1 PERSONA NATURAL', '2 PERSONA JURÍDICA', '3 P JURÍDICA - UNIÓN TEMPORAL o CONSORCIO']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/NATURALEZA/items?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "NATURALEZA", "items"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Tipo de adición: \"no se ha adicionado\" sí es un valor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('VALOR, TIEMPO, VALOR_TIEMPO y SIN_ADICION', () => pm.expect(items.map(i => i.codigo)).to.eql(['VALOR', 'TIEMPO', 'VALOR_TIEMPO', 'SIN_ADICION']));",
+                  "pm.test('SIN_ADICION con su texto oficial', () => pm.expect(items[3].etiqueta).to.eql('4 NO SE HA ADICIONADO NI EN VALOR y EN TIEMPO'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/TIPO_ADICION/items?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "TIPO_ADICION", "items"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Fuente de financiación: sin código SIRECI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('Las 5 fuentes con tildes, en el orden del Excel', () => pm.expect(items.map(i => i.nombre)).to.eql(['Funcionamiento', 'Inversión', 'SGR', 'Externos', 'Otro']));",
+                  "pm.test('Sin código SIRECI: la etiqueta es el nombre', () => {",
+                  "    pm.expect(items.every(i => i.codigoSireci === null || i.codigoSireci === undefined)).to.be.true;",
+                  "    pm.expect(items.every(i => i.etiqueta === i.nombre)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/FUENTE_FINANCIACION/items?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "FUENTE_FINANCIACION", "items"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Aseguradoras unificadas y sin N/A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const nombres = pm.response.json().map(i => i.nombre);",
+                  "pm.test('Las 4 aseguradoras, sin variantes duplicadas', () => pm.expect(nombres).to.have.members([",
+                  "    'SEGUROS MUNDIAL', 'SEGUROS DEL ESTADO', 'SURA', 'ASEGURADORA SOLIDARIA DE COLOMBIA']));",
+                  "pm.test('N/A no es una aseguradora', () => pm.expect(nombres).to.not.include('N/A'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/ASEGURADORA/items?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "ASEGURADORA", "items"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Catálogos",
+      "item": [
+        {
+          "name": "1.1 Crear catálogo (código en mayúsculas, textos limpios)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created con Location al código', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(pm.response.headers.get('Location')).to.include('/api/catalogos/' + pm.collectionVariables.get('catalogo'));",
+                  "});",
+                  "const c = pm.response.json();",
+                  "pm.test('Código en mayúsculas', () => pm.expect(c.codigo).to.eql(pm.collectionVariables.get('catalogo')));",
+                  "pm.test('Nombre sin espacios sobrantes y descripción vacía como null', () => {",
+                  "    pm.expect(c.nombre).to.eql('Catálogo de prueba ' + pm.collectionVariables.get('sufijo'));",
+                  "    pm.expect(c.descripcion == null).to.be.true;",
+                  "});",
+                  "pm.test('Activo', () => pm.expect(c.activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \" prueba_{{sufijo}} \",\n  \"nombre\": \"  Catálogo   de prueba {{sufijo}} \",\n  \"descripcion\": \"\"\n}" },
+            "url": "{{baseUrl}}/catalogos"
+          }
+        },
+        {
+          "name": "1.2 Rechazar código repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('Nombra el catálogo repetido', () => pm.expect(pm.response.json().mensaje).to.eql('Ya existe el catálogo ' + pm.collectionVariables.get('catalogo')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"Prueba_{{sufijo}}\",\n  \"nombre\": \"Otro\"\n}" },
+            "url": "{{baseUrl}}/catalogos"
+          }
+        },
+        {
+          "name": "1.3 Rechazar código con formato inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el formato', () => pm.expect(pm.response.json().errores.codigo).to.include('letras, números y guion bajo'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"TIPO SEGUIMIENTO\",\n  \"nombre\": \"Con espacio\"\n}" },
+            "url": "{{baseUrl}}/catalogos"
+          }
+        },
+        {
+          "name": "1.4 Consultar por código sin importar mayúsculas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Encuentra el catálogo', () => pm.expect(pm.response.json().codigo).to.eql(pm.collectionVariables.get('catalogo')));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/catalogos/prueba_{{sufijo}}" }
+        },
+        {
+          "name": "1.5 Actualizar nombre y descripción",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "pm.test('Aplica nombre y descripción y conserva el código', () => {",
+                  "    pm.expect(c.nombre).to.eql('Catálogo de prueba actualizado');",
+                  "    pm.expect(c.descripcion).to.eql('Creado por la colección de Postman');",
+                  "    pm.expect(c.codigo).to.eql(pm.collectionVariables.get('catalogo'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Catálogo de prueba actualizado\",\n  \"descripcion\": \"Creado por la colección de Postman\"\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}"
+          }
+        },
+        {
+          "name": "1.6 Rechazar cambiar el código (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que el programa usa el código', () => pm.expect(pm.response.json().mensaje).to.include('no se puede cambiar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Catálogo de prueba actualizado\",\n  \"codigo\": \"OTRO_{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}"
+          }
+        },
+        {
+          "name": "1.7 Consultar catálogo inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código GC-0003', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0003'));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/catalogos/NO_EXISTE_{{sufijo}}" }
+        }
+      ]
+    },
+    {
+      "name": "02 Ítems",
+      "item": [
+        {
+          "name": "2.1 Crear ítem con código SIRECI (código en mayúsculas, etiqueta)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const i = pm.response.json();",
+                  "pm.test('Código en mayúsculas y nombre tal como se escribe', () => {",
+                  "    pm.expect(i.codigo).to.eql('ALFA');",
+                  "    pm.expect(i.nombre).to.eql('Ítem Alfa');",
+                  "    pm.expect(i.catalogo).to.eql(pm.collectionVariables.get('catalogo'));",
+                  "});",
+                  "pm.test('Etiqueta \"código SIRECI + nombre\"', () => pm.expect(i.etiqueta).to.eql('7 Ítem Alfa'));",
+                  "pm.collectionVariables.set('alfaId', i.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \" alfa \",\n  \"codigoSireci\": \"7\",\n  \"nombre\": \"  Ítem   Alfa \",\n  \"orden\": 2\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items"
+          }
+        },
+        {
+          "name": "2.2 Crear ítem sin código SIRECI (la etiqueta es el nombre)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const i = pm.response.json();",
+                  "pm.test('Etiqueta = nombre', () => pm.expect(i.etiqueta).to.eql('Ítem Beta'));",
+                  "pm.collectionVariables.set('betaId', i.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"BETA\",\n  \"nombre\": \"Ítem Beta\",\n  \"orden\": 1\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items"
+          }
+        },
+        {
+          "name": "2.3 Crear un tercer ítem con el mismo orden que Alfa",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('gammaId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"GAMMA\",\n  \"nombre\": \"Ítem Gamma\",\n  \"orden\": 2\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items"
+          }
+        },
+        {
+          "name": "2.4 Rechazar código repetido en el catálogo (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('Nombra el código repetido', () => pm.expect(pm.response.json().mensaje).to.eql('Ya existe el código ALFA en el catálogo ' + pm.collectionVariables.get('catalogo')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"alfa\",\n  \"nombre\": \"Otro nombre\"\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items"
+          }
+        },
+        {
+          "name": "2.5 Rechazar nombre repetido sin importar mayúsculas (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('Nombra el ítem repetido', () => pm.expect(pm.response.json().mensaje).to.include('Ya existe el ítem'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"DELTA\",\n  \"nombre\": \"ÍTEM ALFA\"\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items"
+          }
+        },
+        {
+          "name": "2.6 Rechazar campos inválidos (400 con detalle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Detalla código, nombre y orden', () => {",
+                  "    pm.expect(e.errores.codigo).to.include('solo admite letras, números y guion bajo');",
+                  "    pm.expect(e.errores.nombre).to.eql('El nombre del ítem es obligatorio');",
+                  "    pm.expect(e.errores.orden).to.eql('El orden no puede ser negativo');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"PAGO ANTICIPADO\",\n  \"nombre\": \"\",\n  \"orden\": -1\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items"
+          }
+        },
+        {
+          "name": "2.7 Listar ordenado por orden y luego por nombre",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Beta (orden 1), Alfa y Gamma (orden 2, por nombre)', () => pm.expect(pm.response.json().map(i => i.codigo)).to.eql(['BETA', 'ALFA', 'GAMMA']));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/catalogos/{{catalogo}}/items" }
+        },
+        {
+          "name": "2.8 Actualizar nombre, código SIRECI y orden",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const i = pm.response.json();",
+                  "pm.test('Aplica los cambios y conserva el código', () => {",
+                  "    pm.expect(i.nombre).to.eql('Ítem Alfa actualizado');",
+                  "    pm.expect(i.codigoSireci).to.eql('8');",
+                  "    pm.expect(i.orden).to.eql(5);",
+                  "    pm.expect(i.codigo).to.eql('ALFA');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Ítem Alfa actualizado\",\n  \"codigoSireci\": \"8\",\n  \"orden\": 5\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items/{{alfaId}}"
+          }
+        },
+        {
+          "name": "2.9 Rechazar cambiar el código del ítem (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que el código no cambia', () => pm.expect(pm.response.json().mensaje).to.include('El código del ítem no se puede cambiar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Ítem Alfa actualizado\",\n  \"codigo\": \"OMEGA\"\n}" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items/{{alfaId}}"
+          }
+        },
+        {
+          "name": "2.10 Un ítem de otro catálogo no existe en esta URL (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Explica que no es de este catálogo', () => pm.expect(pm.response.json().mensaje).to.include('en el catálogo ' + pm.collectionVariables.get('catalogo')));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/catalogos/{{catalogo}}/items/{{ccId}}" }
+        }
+      ]
+    },
+    {
+      "name": "03 Estado y validación",
+      "item": [
+        {
+          "name": "3.1 Inactivar el ítem Gamma",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/{{catalogo}}/items/{{gammaId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "{{catalogo}}", "items", "{{gammaId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "3.2 El selector ya no ofrece el ítem inactivo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo Beta y Alfa, en su orden', () => pm.expect(pm.response.json().map(i => i.codigo)).to.eql(['BETA', 'ALFA']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/{{catalogo}}/items?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "{{catalogo}}", "items"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "3.3 Un ítem de otro catálogo se rechaza al guardar un tercero (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('validarItem: el ítem es de otro catálogo', () => pm.expect(pm.response.json().mensaje).to.eql(",
+                  "    \"El ítem '8 Ítem Alfa actualizado' es del catálogo \" + pm.collectionVariables.get('catalogo') + ' y se esperaba uno del catálogo TIPO_IDENTIFICACION'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tipoIdentificacionId\": {{alfaId}},\n  \"numeroDocumento\": \"9{{sufijo}}\",\n  \"nombres\": \"Ana\",\n  \"apellidos\": \"Catálogo C{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "3.4 Inactivar el catálogo de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/{{catalogo}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "{{catalogo}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "3.5 Con el catálogo inactivo el selector queda vacío",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Ningún ítem que ofrecer', () => pm.expect(pm.response.json().length).to.eql(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogos/{{catalogo}}/items?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogos", "{{catalogo}}", "items"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "3.6 La administración sigue viendo sus 3 ítems",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Los 3 ítems siguen existiendo', () => pm.expect(pm.response.json().length).to.eql(3));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/catalogos/{{catalogo}}/items" }
+        },
+        {
+          "name": "3.7 Rechazar cuerpo que no es JSON (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 415 Unsupported Media Type', () => pm.response.to.have.status(415));",
+                  "pm.test('Código GC-0010', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0010'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "text/plain" }],
+            "body": { "mode": "raw", "raw": "ALFA" },
+            "url": "{{baseUrl}}/catalogos/{{catalogo}}/items"
+          }
+        },
+        {
+          "name": "3.8 Consultar ítem inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/catalogos/{{catalogo}}/items/999999999" }
+        }
+      ]
+    }
+  ]
+}

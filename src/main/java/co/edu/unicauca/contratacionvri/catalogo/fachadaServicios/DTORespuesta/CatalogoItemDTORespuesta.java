@@ -2,7 +2,6 @@ package co.edu.unicauca.contratacionvri.catalogo.fachadaServicios.DTORespuesta;
 
 import java.time.LocalDateTime;
 
-import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -13,11 +12,14 @@ import lombok.Setter;
 public class CatalogoItemDTORespuesta {
 
     private Long id;
-    private Catalogo catalogo;
+    /** Código del catálogo al que pertenece (TIPO_IDENTIFICACION...). */
+    private String catalogo;
+    private String codigo;
     private String codigoSireci;
     private String nombre;
-    /** "código nombre", p. ej. "3 CÉDULA DE CIUDADANÍA". */
+    /** "3 CÉDULA DE CIUDADANÍA", o solo el nombre si no tiene código SIRECI. */
     private String etiqueta;
+    private Integer orden;
     private Boolean activo;
     private LocalDateTime creadoEn;
     private LocalDateTime actualizadoEn;

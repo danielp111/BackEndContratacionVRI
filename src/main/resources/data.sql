@@ -255,16 +255,88 @@ INSERT IGNORE INTO dependencia (id, nombre, activo, creado_en, actualizado_en) V
     (55, 'Unilingua',                                                       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 -- =============================================================================================
--- Tipos de identificación del SIRECI (hoja CONTROL, lista TIPO DE DOCUMENTO, filas 348 a 351).
--- Sin ids fijos: la clave natural es (catalogo, codigo_sireci), así no choca con ítems que ya
--- existan con otros ids. El código 5 ("no se diligencia información...") no es un tipo de documento:
--- pertenece al reporte SIRECI y no se carga.
+-- Catálogos de listas cortas y sus ítems. Fuente: hoja CONTROL del libro de contratación, salvo las
+-- aseguradoras, que no están en CONTROL y salen de la columna COMPAÑIA ASEGURADORA de los contratos.
+--   * Sin ids fijos: la clave natural es catalogo.codigo y (catalogo_id, codigo) para los ítems, así
+--     no choca con registros que ya existan con otros ids.
+--   * codigo = mnemónico que usa el programa (CC, NIT...); codigo_sireci = número del SIRECI.
+--   * orden = código SIRECI (o el orden del Excel si no tiene). Los selectores ordenan por orden y nombre.
+--   * Se excluyen las opciones "NO SE DILIGENCIA INFORMACIÓN PARA ESTE FORMULARIO EN ESTE PERÍODO DE
+--     REPORTE": pertenecen al reporte SIRECI, no son valores de un registro. "4 NO SE HA ADICIONADO..."
+--     sí es un valor real del tipo de adición.
+--   * Aseguradoras unificadas: SEGUROS MUNDIAL (y "S.A"), SEGUROS DEL ESTADO (y "SA"), SURA,
+--     ASEGURADORA SOLIDARIA DE COLOMBIA (y "ASEGURADORA SOLIDARIA"). "N/A" (105 contratos) significa
+--     sin póliza y no se carga.
 -- =============================================================================================
-INSERT IGNORE INTO catalogo_item (catalogo, codigo_sireci, nombre, activo, creado_en, actualizado_en) VALUES
-    ('TIPO_IDENTIFICACION', '1', 'NIT',                              TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('TIPO_IDENTIFICACION', '2', 'RUT - REGISTRO ÚNICO TRIBUTARIO',  TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('TIPO_IDENTIFICACION', '3', 'CÉDULA DE CIUDADANÍA',             TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('TIPO_IDENTIFICACION', '4', 'CÉDULA DE EXTRANJERÍA',            TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT IGNORE INTO catalogo (codigo, nombre, descripcion, activo, creado_en, actualizado_en) VALUES
+    ('TIPO_IDENTIFICACION', 'Tipo de identificación', 'Tipos de documento del SIRECI (hoja CONTROL, A348:A351).', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('NATURALEZA', 'Naturaleza', 'Naturaleza del contratista en el SIRECI (hoja CONTROL, A341:A343).', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('TIPO_SEGUIMIENTO', 'Tipo de seguimiento', 'Supervisión o interventoría del contrato (hoja CONTROL, A356:A358).', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('TIPO_ANTICIPO', 'Anticipo', 'Anticipo o pago anticipado (hoja CONTROL, A363:A365).', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('TIPO_ADICION', 'Tipo de adición', 'Adiciones en valor o en tiempo (hoja CONTROL, A369:A372).', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('FUENTE_FINANCIACION', 'Fuente de financiación', 'Fuente de los recursos del contrato (hoja CONTROL, A455:A459). Sin código SIRECI.', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('ASEGURADORA', 'Aseguradora', 'Compañías de seguros de las pólizas (de la columna COMPAÑIA ASEGURADORA de los contratos). Sin código SIRECI.', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT IGNORE INTO catalogo_item (catalogo_id, codigo, codigo_sireci, nombre, orden, activo, creado_en, actualizado_en)
+    SELECT k.id, v.codigo, v.codigo_sireci, v.nombre, v.orden, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo k JOIN (
+    SELECT 'NIT' AS codigo, '1' AS codigo_sireci, 'NIT' AS nombre, 1 AS orden
+    UNION ALL SELECT 'RUT' AS codigo, '2' AS codigo_sireci, 'RUT - REGISTRO ÚNICO TRIBUTARIO' AS nombre, 2 AS orden
+    UNION ALL SELECT 'CC' AS codigo, '3' AS codigo_sireci, 'CÉDULA DE CIUDADANÍA' AS nombre, 3 AS orden
+    UNION ALL SELECT 'CE' AS codigo, '4' AS codigo_sireci, 'CÉDULA DE EXTRANJERÍA' AS nombre, 4 AS orden
+    ) v ON 1 = 1
+    WHERE k.codigo = 'TIPO_IDENTIFICACION';
+INSERT IGNORE INTO catalogo_item (catalogo_id, codigo, codigo_sireci, nombre, orden, activo, creado_en, actualizado_en)
+    SELECT k.id, v.codigo, v.codigo_sireci, v.nombre, v.orden, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo k JOIN (
+    SELECT 'NATURAL' AS codigo, '1' AS codigo_sireci, 'PERSONA NATURAL' AS nombre, 1 AS orden
+    UNION ALL SELECT 'JURIDICA' AS codigo, '2' AS codigo_sireci, 'PERSONA JURÍDICA' AS nombre, 2 AS orden
+    UNION ALL SELECT 'CONSORCIO_UT' AS codigo, '3' AS codigo_sireci, 'P JURÍDICA - UNIÓN TEMPORAL o CONSORCIO' AS nombre, 3 AS orden
+    ) v ON 1 = 1
+    WHERE k.codigo = 'NATURALEZA';
+INSERT IGNORE INTO catalogo_item (catalogo_id, codigo, codigo_sireci, nombre, orden, activo, creado_en, actualizado_en)
+    SELECT k.id, v.codigo, v.codigo_sireci, v.nombre, v.orden, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo k JOIN (
+    SELECT 'INTERVENTOR' AS codigo, '1' AS codigo_sireci, 'INTERVENTOR' AS nombre, 1 AS orden
+    UNION ALL SELECT 'SUPERVISOR' AS codigo, '2' AS codigo_sireci, 'SUPERVISOR' AS nombre, 2 AS orden
+    UNION ALL SELECT 'INTERVENTOR_SUPERVISOR' AS codigo, '3' AS codigo_sireci, 'INTERVENTOR y SUPERVISOR' AS nombre, 3 AS orden
+    ) v ON 1 = 1
+    WHERE k.codigo = 'TIPO_SEGUIMIENTO';
+INSERT IGNORE INTO catalogo_item (catalogo_id, codigo, codigo_sireci, nombre, orden, activo, creado_en, actualizado_en)
+    SELECT k.id, v.codigo, v.codigo_sireci, v.nombre, v.orden, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo k JOIN (
+    SELECT 'ANTICIPO' AS codigo, '1' AS codigo_sireci, 'ANTICIPOS' AS nombre, 1 AS orden
+    UNION ALL SELECT 'PAGO_ANTICIPADO' AS codigo, '2' AS codigo_sireci, 'PAGO ANTICIPADO' AS nombre, 2 AS orden
+    UNION ALL SELECT 'NO_PACTADO' AS codigo, '3' AS codigo_sireci, 'NO PACTADOS' AS nombre, 3 AS orden
+    ) v ON 1 = 1
+    WHERE k.codigo = 'TIPO_ANTICIPO';
+INSERT IGNORE INTO catalogo_item (catalogo_id, codigo, codigo_sireci, nombre, orden, activo, creado_en, actualizado_en)
+    SELECT k.id, v.codigo, v.codigo_sireci, v.nombre, v.orden, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo k JOIN (
+    SELECT 'VALOR' AS codigo, '1' AS codigo_sireci, 'ADICIÓN EN VALOR (DIFERENTE A PRÓRROGAS)' AS nombre, 1 AS orden
+    UNION ALL SELECT 'TIEMPO' AS codigo, '2' AS codigo_sireci, 'ADICIÓN EN TIEMPO (PRÓRROGAS)' AS nombre, 2 AS orden
+    UNION ALL SELECT 'VALOR_TIEMPO' AS codigo, '3' AS codigo_sireci, 'ADICIÓN EN VALOR y EN TIEMPO' AS nombre, 3 AS orden
+    UNION ALL SELECT 'SIN_ADICION' AS codigo, '4' AS codigo_sireci, 'NO SE HA ADICIONADO NI EN VALOR y EN TIEMPO' AS nombre, 4 AS orden
+    ) v ON 1 = 1
+    WHERE k.codigo = 'TIPO_ADICION';
+INSERT IGNORE INTO catalogo_item (catalogo_id, codigo, codigo_sireci, nombre, orden, activo, creado_en, actualizado_en)
+    SELECT k.id, v.codigo, v.codigo_sireci, v.nombre, v.orden, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo k JOIN (
+    SELECT 'FUNCIONAMIENTO' AS codigo, NULL AS codigo_sireci, 'Funcionamiento' AS nombre, 1 AS orden
+    UNION ALL SELECT 'INVERSION' AS codigo, NULL AS codigo_sireci, 'Inversión' AS nombre, 2 AS orden
+    UNION ALL SELECT 'SGR' AS codigo, NULL AS codigo_sireci, 'SGR' AS nombre, 3 AS orden
+    UNION ALL SELECT 'EXTERNOS' AS codigo, NULL AS codigo_sireci, 'Externos' AS nombre, 4 AS orden
+    UNION ALL SELECT 'OTRO' AS codigo, NULL AS codigo_sireci, 'Otro' AS nombre, 5 AS orden
+    ) v ON 1 = 1
+    WHERE k.codigo = 'FUENTE_FINANCIACION';
+INSERT IGNORE INTO catalogo_item (catalogo_id, codigo, codigo_sireci, nombre, orden, activo, creado_en, actualizado_en)
+    SELECT k.id, v.codigo, v.codigo_sireci, v.nombre, v.orden, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo k JOIN (
+    SELECT 'SEGUROS_MUNDIAL' AS codigo, NULL AS codigo_sireci, 'SEGUROS MUNDIAL' AS nombre, 1 AS orden
+    UNION ALL SELECT 'SEGUROS_ESTADO' AS codigo, NULL AS codigo_sireci, 'SEGUROS DEL ESTADO' AS nombre, 2 AS orden
+    UNION ALL SELECT 'SURA' AS codigo, NULL AS codigo_sireci, 'SURA' AS nombre, 3 AS orden
+    UNION ALL SELECT 'SOLIDARIA' AS codigo, NULL AS codigo_sireci, 'ASEGURADORA SOLIDARIA DE COLOMBIA' AS nombre, 4 AS orden
+    ) v ON 1 = 1
+    WHERE k.codigo = 'ASEGURADORA';
 
 -- =============================================================================================
 -- Ordenadores del gasto. Fuente: hoja CONSOLIDADO ANUAL (columnas N, O y P: 127 contratos, 2
@@ -281,66 +353,66 @@ INSERT IGNORE INTO catalogo_item (catalogo, codigo_sireci, nombre, activo, cread
 -- =============================================================================================
 INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
     SELECT 'NATURAL', c.id, '76314448', 'FRANCISCO JOSE PINO CORREA', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+    FROM catalogo_item c WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC';
 INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
     SELECT t.id, 'FRANCISCO JOSE', 'PINO CORREA'
     FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76314448' AND t.naturaleza = 'NATURAL';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '76314448' AND t.naturaleza = 'NATURAL';
 INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
     SELECT 'NATURAL', c.id, '76311561', 'DEIBAR RENE HURTADO HERRERA', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+    FROM catalogo_item c WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC';
 INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
     SELECT t.id, 'DEIBAR RENE', 'HURTADO HERRERA'
     FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76311561' AND t.naturaleza = 'NATURAL';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '76311561' AND t.naturaleza = 'NATURAL';
 INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
     SELECT 'NATURAL', c.id, '34570235', 'CIELO PEREZ SOLANO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+    FROM catalogo_item c WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC';
 INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
     SELECT t.id, 'CIELO', 'PEREZ SOLANO'
     FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '34570235' AND t.naturaleza = 'NATURAL';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '34570235' AND t.naturaleza = 'NATURAL';
 INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
     SELECT 'NATURAL', c.id, '10535844', 'JOSE LUIS DIAGO FRANCO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+    FROM catalogo_item c WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC';
 INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
     SELECT t.id, 'JOSE LUIS', 'DIAGO FRANCO'
     FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '10535844' AND t.naturaleza = 'NATURAL';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '10535844' AND t.naturaleza = 'NATURAL';
 INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
     SELECT 'NATURAL', c.id, '34552816', 'JANETH NOGUERA RAMOS', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+    FROM catalogo_item c WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC';
 INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
     SELECT t.id, 'JANETH', 'NOGUERA RAMOS'
     FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '34552816' AND t.naturaleza = 'NATURAL';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '34552816' AND t.naturaleza = 'NATURAL';
 INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
     SELECT 'NATURAL', c.id, '7551810', 'HECTOR SAMUEL VILLADA CASTILLO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+    FROM catalogo_item c WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC';
 INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
     SELECT t.id, 'HECTOR SAMUEL', 'VILLADA CASTILLO'
     FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '7551810' AND t.naturaleza = 'NATURAL';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '7551810' AND t.naturaleza = 'NATURAL';
 INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
     SELECT 'NATURAL', c.id, '76321704', 'ALEJANDRO TOLEDO TOVAR', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+    FROM catalogo_item c WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC';
 INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
     SELECT t.id, 'ALEJANDRO', 'TOLEDO TOVAR'
     FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76321704' AND t.naturaleza = 'NATURAL';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '76321704' AND t.naturaleza = 'NATURAL';
 INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
     SELECT 'NATURAL', c.id, '15505403', 'JUAN CARLOS CASAS ZAPATA', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+    FROM catalogo_item c WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC';
 INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
     SELECT t.id, 'JUAN CARLOS', 'CASAS ZAPATA'
     FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '15505403' AND t.naturaleza = 'NATURAL';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '15505403' AND t.naturaleza = 'NATURAL';
 -- Periodos (uk_ordenador_gasto_periodo: tercero + cargo + fecha_desde hace idempotente la carga).
 INSERT IGNORE INTO ordenador_gasto (tercero_id, cargo, es_delegado, acto_delegacion, fecha_desde, fecha_hasta, activo, creado_en, actualizado_en)
     SELECT pn.tercero_id, 'Vicerrector de Investigaciones', FALSE, NULL, DATE '2026-01-01', NULL, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     FROM persona_natural pn JOIN tercero t ON t.id = pn.tercero_id JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76314448';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '76314448';
 INSERT IGNORE INTO ordenador_gasto (tercero_id, cargo, es_delegado, acto_delegacion, fecha_desde, fecha_hasta, activo, creado_en, actualizado_en)
     SELECT pn.tercero_id, 'Rector', FALSE, NULL, DATE '2026-01-01', NULL, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     FROM persona_natural pn JOIN tercero t ON t.id = pn.tercero_id JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
-    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76311561';
+    WHERE c.catalogo_id = (SELECT k.id FROM catalogo k WHERE k.codigo = 'TIPO_IDENTIFICACION') AND c.codigo = 'CC' AND t.numero_documento = '76311561';
