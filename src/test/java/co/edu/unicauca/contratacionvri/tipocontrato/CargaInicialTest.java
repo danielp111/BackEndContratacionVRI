@@ -19,6 +19,13 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.AmbitoClase;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.modelos.ClaseContratoEntity;
 import co.edu.unicauca.contratacionvri.clasecontrato.accesoADatos.repositorios.ClaseContratoRepositorio;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.Catalogo;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
+import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoItemRepositorio;
+import co.edu.unicauca.contratacionvri.ordenador.accesoADatos.modelos.OrdenadorGastoEntity;
+import co.edu.unicauca.contratacionvri.ordenador.accesoADatos.repositorios.OrdenadorGastoRepositorio;
+import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaNaturalEntity;
+import co.edu.unicauca.contratacionvri.tercero.accesoADatos.repositorios.TerceroRepositorio;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
 import co.edu.unicauca.contratacionvri.rubro.accesoADatos.modelos.RubroEntity;
@@ -63,6 +70,15 @@ class CargaInicialTest {
 
     @Autowired
     private DependenciaRepositorio dependencias;
+
+    @Autowired
+    private CatalogoItemRepositorio catalogo;
+
+    @Autowired
+    private TerceroRepositorio terceros;
+
+    @Autowired
+    private OrdenadorGastoRepositorio ordenadores;
 
     @Autowired
     private INumeracionServicio numeracion;
@@ -307,6 +323,73 @@ class CargaInicialTest {
 
         assertThat(dependencias.count()).isEqualTo(55);
         assertThat(dependencia("CECAV").getActivo()).as("no se reactiva").isFalse();
+    }
+
+    // ------------------------------------------------------------------ tipos de identificación y ordenadores
+
+    private PersonaNaturalEntity personaPorCedula(String cedula) {
+        return terceros.findAll().stream()
+                .filter(t -> t instanceof PersonaNaturalEntity && t.getNumeroDocumento().equals(cedula))
+                .map(PersonaNaturalEntity.class::cast).findFirst().orElseThrow();
+    }
+
+    @Test
+    @Order(13)
+    void cargaLosTiposDeIdentificacionSinElDeNoDiligencia() {
+        assertThat(catalogo.buscar(Catalogo.TIPO_IDENTIFICACION, null)).extracting(CatalogoItemEntity::getEtiqueta)
+                .containsExactly("1 NIT", "2 RUT - REGISTRO ÚNICO TRIBUTARIO", "3 CÉDULA DE CIUDADANÍA", "4 CÉDULA DE EXTRANJERÍA");
+    }
+
+    /** Solo lee; transaccional para poder recorrer las relaciones perezosas (tipo de identificación, tercero). */
+    @Test
+    @Order(14)
+    @org.springframework.transaction.annotation.Transactional
+    void creaLos8OrdenadoresComoPersonasNaturalesYSoloLos2PeriodosCon2026() {
+        String[][] esperados = {
+                {"76314448", "FRANCISCO JOSE", "PINO CORREA"}, {"76311561", "DEIBAR RENE", "HURTADO HERRERA"},
+                {"34570235", "CIELO", "PEREZ SOLANO"}, {"10535844", "JOSE LUIS", "DIAGO FRANCO"},
+                {"34552816", "JANETH", "NOGUERA RAMOS"}, {"7551810", "HECTOR SAMUEL", "VILLADA CASTILLO"},
+                {"76321704", "ALEJANDRO", "TOLEDO TOVAR"}, {"15505403", "JUAN CARLOS", "CASAS ZAPATA"}};
+        for (String[] e : esperados) {
+            PersonaNaturalEntity p = personaPorCedula(e[0]);
+            assertThat(p.getNombres()).as(e[0]).isEqualTo(e[1]);
+            assertThat(p.getApellidos()).as(e[0]).isEqualTo(e[2]);
+            assertThat(p.getNombreCompleto()).isEqualTo(e[1] + " " + e[2]);
+            assertThat(p.getTipoIdentificacion().getEtiqueta()).isEqualTo("3 CÉDULA DE CIUDADANÍA");
+            assertThat(p.getActivo()).isTrue();
+        }
+        assertThat(terceros.count()).isEqualTo(8);
+
+        assertThat(ordenadores.findAll()).hasSize(2).allSatisfy(o -> {
+            assertThat(o.getFechaDesde()).isEqualTo(java.time.LocalDate.of(2026, 1, 1));
+            assertThat(o.getFechaHasta()).isNull();
+            assertThat(o.getEsDelegado()).isFalse();
+            assertThat(o.getActoDelegacion()).isNull();
+            assertThat(o.getActivo()).isTrue();
+        });
+        assertThat(ordenadores.findAll()).extracting(OrdenadorGastoEntity::getEtiqueta).containsExactlyInAnyOrder(
+                "FRANCISCO JOSE PINO CORREA - Vicerrector de Investigaciones",
+                "DEIBAR RENE HURTADO HERRERA - Rector");
+    }
+
+    @Test
+    @Order(15)
+    void volverACargarNoDuplicaTercerosNiPeriodosNiRevierteCambios() {
+        PersonaNaturalEntity pino = personaPorCedula("76314448");
+        pino.setNombres("FRANCISCO JOSÉ");   // la VRI corrige la tilde en el sistema
+        terceros.save(pino);
+        OrdenadorGastoEntity rector = ordenadores.findAll().stream()
+                .filter(o -> o.getCargo().equals("Rector")).findFirst().orElseThrow();
+        rector.setFechaHasta(java.time.LocalDate.of(2026, 12, 31));
+        ordenadores.save(rector);
+
+        volverACargarDataSql();
+
+        assertThat(terceros.count()).isEqualTo(8);
+        assertThat(ordenadores.count()).isEqualTo(2);
+        assertThat(catalogo.buscar(Catalogo.TIPO_IDENTIFICACION, null)).hasSize(4);
+        assertThat(personaPorCedula("76314448").getNombres()).as("no revierte la corrección").isEqualTo("FRANCISCO JOSÉ");
+        assertThat(ordenadores.findById(rector.getId()).orElseThrow().getFechaHasta()).isEqualTo(java.time.LocalDate.of(2026, 12, 31));
     }
 
     @Test
