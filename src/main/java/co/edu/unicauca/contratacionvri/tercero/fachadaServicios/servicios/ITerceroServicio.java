@@ -3,6 +3,7 @@ package co.edu.unicauca.contratacionvri.tercero.fachadaServicios.servicios;
 import co.edu.unicauca.contratacionvri.comun.fachadaServicios.PaginaRespuesta;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.Naturaleza;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaNaturalEntity;
+import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.TerceroEntity;
 import co.edu.unicauca.contratacionvri.tercero.fachadaServicios.DTOPeticion.PersonaJuridicaDTOPeticion;
 import co.edu.unicauca.contratacionvri.tercero.fachadaServicios.DTOPeticion.PersonaNaturalDTOPeticion;
 import co.edu.unicauca.contratacionvri.tercero.fachadaServicios.DTORespuesta.PersonaJuridicaDTORespuesta;
@@ -42,4 +43,10 @@ public interface ITerceroServicio {
      * Lanza ReglaNegocioException (400) con el {@code rol} en el mensaje, p. ej. "director del proyecto".
      */
     PersonaNaturalEntity obtenerPersonaNaturalValida(Long id, PersonaNaturalEntity actual, String rol);
+
+    /**
+     * Igual que {@link #obtenerPersonaNaturalValida} pero acepta persona natural o jurídica
+     * (contratista, entidad financiadora...). Si cambia respecto a {@code actual}, debe existir y estar activo.
+     */
+    TerceroEntity obtenerTerceroValido(Long id, TerceroEntity actual, String rol);
 }

@@ -236,6 +236,19 @@ public class TerceroServicioImpl implements ITerceroServicio {
         return persona;
     }
 
+    @Override
+    public TerceroEntity obtenerTerceroValido(Long id, TerceroEntity actual, String rol) {
+        if (actual != null && Objects.equals(actual.getId(), id)) {
+            return actual;
+        }
+        TerceroEntity tercero = repositorio.findById(id).orElseThrow(() ->
+                new ReglaNegocioException("El " + rol + " con id " + id + " no existe"));
+        if (!Boolean.TRUE.equals(tercero.getActivo())) {
+            throw new ReglaNegocioException("El " + rol + " " + tercero.getNombreCompleto() + " está inactivo");
+        }
+        return tercero;
+    }
+
     /** Asigna tipo, DV y nombre completo, y guarda. El DV solo existe para NIT. */
     private void completarYGuardar(TerceroEntity tercero, CatalogoItemEntity tipo) {
         tercero.setTipoIdentificacion(tipo);

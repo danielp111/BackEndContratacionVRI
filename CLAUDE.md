@@ -52,7 +52,7 @@ Escala de referencia (vigencia 2026, enero a marzo): 128 números asignados, 84%
 |---|---|
 | ABOGADO | Crea el contrato, obtiene el número y llena los datos precontractuales y contractuales hasta el acta de inicio. Ve y edita sus contratos. |
 | FINANCIERO | Registra pagos, fecha de certificación de pago, acta final o liquidación y datos de contacto del contratista. |
-| ADMIN | Administra usuarios, maestros, catálogos, vigencias y consecutivos. |
+| ADMIN | Administra usuarios, maestros, catálogos y consecutivos. |
 | CONSULTA | Solo lectura. |
 
 Adiciones y observaciones las pueden editar abogados y financiero. Los campos calculados no los edita nadie. La matriz campo por campo está en `INFORMACIÓN VRI.xlsx` y debe aplicarse en el backend, no solo ocultarse en el frontend.
@@ -67,11 +67,12 @@ Adiciones y observaciones las pueden editar abogados y financiero. Los campos ca
 
 ## Ciclo de vida del contrato
 
-Estados (guardarlos explícitamente; hoy se deducen de las fechas):
+Estados: `EN_TRAMITE` → `SUSCRITO` → `EN_EJECUCION` → `TERMINADO` → `LIQUIDADO`, y `ANULADO` para un número asignado que no se usó.
 
-`EN_TRAMITE` → `SUSCRITO` → `EN_EJECUCION` → `TERMINADO` → `LIQUIDADO`, y `ANULADO` para un número asignado que no se usó.
-
-- El abogado lo lleva desde el número hasta el acta de inicio; el financiero, desde los pagos hasta el cierre.
+- El estado se guarda en `contrato.estado`, pero nadie lo escribe: el sistema lo recalcula al guardar a partir de las fechas (`ContratoEntity.recalcularEstado()`). Sin suscripción = EN_TRAMITE; con suscripción = SUSCRITO; con inicio = EN_EJECUCION; con terminación = TERMINADO; con acta final = LIQUIDADO.
+- ANULADO es la única acción explícita (`PATCH /api/contratos/{id}/anular` con motivo): solo desde EN_TRAMITE, irreversible, el contrato queda de solo lectura (no admite cambios ni observaciones nuevas) y su número no se reutiliza.
+- Mientras está EN_TRAMITE el contrato se guarda incompleto. Registrar la fecha de suscripción exige: clase, contratista, ordenador, tipo de seguimiento, valor sin IVA, IVA, plazo, rubro, fuente de financiación, tipo de anticipo y dependencia solicitante (el 400 dice cuáles faltan).
+- El abogado lo lleva desde el número hasta el acta de inicio (`PUT /api/contratos/{id}`); el financiero registra el cierre (`PATCH /{id}/cierre`: terminación, acta final y certificación de pago). La fecha de terminación la pueden registrar los dos.
 - Desde la suscripción, el contrato entra al reporte trimestral SIRECI y se reporta cada trimestre mientras esté vivo, incluso en años siguientes.
 
 ## Reglas de negocio
@@ -123,12 +124,7 @@ Convenciones del modelo:
 
 ### 1. Maestros y catálogos
 
-**`vigencia`**: año de trabajo.
-
-| Campo | Tipo | Llave / regla |
-|---|---|---|
-| anio | SMALLINT | PK |
-| abierta | BOOLEAN | Solo en vigencias abiertas se crean contratos |
+**Vigencia**: no es una tabla. Es el año del contrato, guardado como número (`contrato.anio`, `consecutivo.anio`) y validado entre 2000 y 2100. Un contrato nuevo solo se crea en el año actual o en los `vri.contrato.anios-atras` anteriores (por defecto 1: en enero aún se puede numerar un trámite del año que terminó). Los contratos existentes de años anteriores se siguen editando y reportando.
 
 **`serie_documental`**: serie de la TRD; es el prefijo del número del contrato y la unidad del consecutivo.
 
@@ -153,10 +149,10 @@ Convenciones del modelo:
 | Campo | Tipo | Llave / regla |
 |---|---|---|
 | serie_id | BIGINT | PK compuesta, FK `serie_documental` |
-| anio | SMALLINT | PK compuesta. Hoy se valida entre 2000 y 2100; cuando exista `vigencia`, pasa a ser FK a ella |
+| anio | SMALLINT | PK compuesta. Número entre 2000 y 2100 (no hay tabla de vigencias) |
 | ultimo_numero | INT | Se incrementa con bloqueo de fila (`SELECT … FOR UPDATE`); ver "Numeración" |
 
-**Uso por contratos (provisional).** "Ya hay contratos que usan la serie o el tipo" lo responde la interfaz `UsoTipoContratoChecker`. Mientras no exista la tabla `contrato`, su implementación `UsoTipoContratoCheckerProvisional` considera usada una serie si ya emitió algún número en cualquier año (consecutivo > 0, incluye anulados) y responde que ningún tipo tiene contratos. **Al crear el dominio de contratos hay que reemplazarla** por una que consulte `contrato`.
+**Uso por contratos.** "Ya hay contratos que usan la serie o el tipo" lo responde la interfaz `UsoTipoContratoChecker`, implementada en el dominio de contratos (`UsoTipoContratoCheckerContratos`): un tipo está usado si tiene contratos; una serie, si tiene contratos o si ya emitió algún número en cualquier año (consecutivo > 0), lo que cubre los números de la carga inicial, emitidos antes de que existiera la tabla `contrato`.
 
 **Carga inicial.** `src/main/resources/data.sql` carga las 15 series, los 17 tipos y el consecutivo 2026 de cada serie con el último número usado según la hoja CONTROL (fila 3, CANTIDAD): OPS 108, Suministro 15, `6.1-17.3` 1, Consultoría 1, Compraventa 3 y el resto 0. Corre en cada arranque (`spring.sql.init.mode=always`, `spring.jpa.defer-datasource-initialization=true`) y es idempotente: `INSERT IGNORE` con ids fijos, así nunca sobrescribe un consecutivo que avanzó ni recrea un tipo renombrado o reactiva uno inactivado. **Antes de producción** pasar a Flyway y dejar `ddl-auto=validate`.
 
@@ -240,7 +236,7 @@ Naturaleza para el SIRECI (catálogo `NATURALEZA`): sale del tercero, sin guarda
 
 - Único por (tercero_id, cargo, fecha_desde) (`uk_ordenador_gasto_periodo`), que además hace idempotente la carga inicial.
 - Un mismo tercero no puede tener dos periodos **activos** con el mismo cargo que se crucen (409); el cargo se compara sin mayúsculas ni tildes. Un periodo inactivo no bloquea, y reactivarlo vuelve a validar el cruce.
-- No hay borrado: se inactiva o se cierra el periodo (`PATCH /{id}/cerrar`). Si ya hay contratos (`UsoOrdenadorChecker`; su implementación provisional responde "sin contratos" hasta que exista la tabla contrato), el tercero, el cargo y la fecha desde no se pueden cambiar; cerrar sí.
+- No hay borrado: se inactiva o se cierra el periodo (`PATCH /{id}/cerrar`). Si ya hay contratos (`UsoOrdenadorChecker`, que consulta `contrato.ordenador_gasto_id`), el tercero, el cargo y la fecha desde no se pueden cambiar; cerrar sí.
 - El contrato guardará `ordenador_gasto_id` (el periodo, no la persona) y lo validará con `IOrdenadorGastoServicio.obtenerOrdenadorValido(id, actual, fechaSuscripcion)`: activo si cambia, y la fecha de suscripción siempre dentro del periodo. Así se corrige un error del Excel: allí el cargo se busca con `BUSCARV` por el nombre y, si una persona tiene dos cargos, devuelve siempre el primero.
 - La API devuelve `nombre`, `cedula` y `tipoIdentificacion` del tercero junto con el `cargo`, listos para el SIRECI ("nombre, cédula y cargo del ordenador del gasto o su delegado").
 - Carga inicial (`data.sql`): valores distintos de la hoja CONSOLIDADO ANUAL (columnas N, O y P; 127 contratos, 2 combinaciones) y de la lista ORDENADOR DEL GASTO de CONTROL (A428:C436): 8 personas y 9 combinaciones de nombre, cédula y cargo. Las 8 personas se crean como persona natural con cédula si no existe ya un tercero con esa cédula (clave natural, sin ids fijos); nombres tal como vienen (mayúsculas, sin tildes), separados tomando las dos últimas palabras como apellidos. Solo las 2 combinaciones con contratos en 2026 tienen periodo: Francisco José Pino Correa, Vicerrector de Investigaciones, y Deibar René Hurtado Herrera, Rector, desde 2026-01-01, abiertos, no delegados, **por confirmar**. Las otras 7 combinaciones quedan sin periodo hasta que la VRI entregue sus fechas. Cargo corregido: "VICERECTOR" (sic) → "Vicerrector".
@@ -268,7 +264,7 @@ Naturaleza para el SIRECI (catálogo `NATURALEZA`): sale del tercero, sin guarda
 
 - **El nombre del rubro es la "dependencia de afectación".** En el libro de Excel, la columna "DEPENDENCIA AFECTACIÓN PRESUPUESTAL" de cada contrato es `BUSCARV(código; CONTROL!A102:B283; 2)`, es decir, el texto del rubro (rango con nombre `Control_Dependencia_Afectacion`). No es una fila de la tabla `dependencia` (esas están en `Control_Dependencias`, CONTROL!C19:C100), por eso el rubro no tiene `dependencia_id`. Tampoco se guarda `codigo_ordenado`: la columna C del Excel es solo la lista ordenada, y el orden lo da la API.
 - Orden de los listados: por longitud del código y luego por valor (orden numérico para códigos de solo dígitos), igual que la lista ordenada del Excel: 1031 antes que 1027008.
-- "Ya hay contratos que lo usan" lo responde `UsoRubroChecker`; su implementación `UsoRubroCheckerProvisional` responde "sin contratos" hasta que exista la tabla contrato (**reemplazarla** entonces). El dominio de contratos valida el rubro con `IRubroServicio.obtenerRubroValido(id, actual)`.
+- "Ya hay contratos que lo usan" lo responde `UsoRubroChecker`, que consulta `contrato_presupuesto.rubro_id`. El dominio de contratos valida el rubro con `IRubroServicio.obtenerRubroValido(id, actual)`.
 - Carga inicial (`data.sql`, ids 1 a 51): los 51 rubros de la hoja CONTROL (filas 102 a 152). El rango con nombre `Control_AfectacionPresupuestal_Depen` (A102:B283) reserva 182 filas, pero las 131 restantes están vacías y no se cargan. Los códigos venían guardados como números en el Excel (`1052002.0`, `9.011044001E9`) y se cargan como texto exacto; ninguno trae puntos, guiones ni ceros a la izquierda. Limpieza: espacios sobrantes y comillas envolventes o sueltas al final (filas 109, 111 y 115); las tildes faltantes en nombres de proyectos no se corrigen porque son nombres oficiales del sistema financiero.
 
 **`dependencia`**
@@ -316,31 +312,42 @@ Naturaleza para el SIRECI (catálogo `NATURALEZA`): sale del tercero, sin guarda
 
 ### 3. Contrato
 
-**`contrato`**: centro del modelo.
+El dominio de contratos se construye por fases: **1** `contrato`, `contrato_presupuesto` y `contrato_observacion` (hecha); **2** detalle (CDP, RP, UNSPSC, seguimiento, modificaciones, pagos, pólizas) y la vista `v_contrato_resumen`; **3** `contrato_sireci`, `publicacion_secop` y `documento_expediente`; **4** reporte SIRECI.
+
+**`contrato`**: centro del modelo (dominio `contrato`).
 
 | Campo | Tipo | Llave / regla |
 |---|---|---|
-| id | BIGINT | PK |
-| numero | VARCHAR(30) | Único, `serie_trd/NNN`, lo genera el sistema |
-| tipo_contrato_id | BIGINT | FK `tipo_contrato` |
-| anio | SMALLINT | FK `vigencia` |
-| consecutivo | INT | Único junto con la serie del tipo y el año; lo asigna `generarNumero` |
-| estado | VARCHAR(20) | EN_TRAMITE, SUSCRITO, EN_EJECUCION, TERMINADO, LIQUIDADO, ANULADO |
-| responsable_id | BIGINT | FK `abogado` |
-| fecha_registro | DATETIME | |
+| id | BIGINT | PK autoincremental |
+| serie_id | BIGINT | FK `serie_documental`. Se copia de la serie del tipo al crear y no cambia |
+| anio | SMALLINT | Año de la vigencia, entre 2000 y 2100. Al crear: año actual o hasta `vri.contrato.anios-atras` anteriores (por defecto 1). No cambia después de crear |
+| consecutivo | INT | Lo asigna `generarNumero` al crear. No cambia. **Único junto con serie y año** (`uk_contrato_numero`) |
+| tipo_contrato_id | BIGINT | FK `tipo_contrato`, activo al crear. No cambia (el número depende de su serie) |
+| estado | VARCHAR(20) | EN_TRAMITE, SUSCRITO, EN_EJECUCION, TERMINADO, LIQUIDADO, ANULADO. Lo calcula el sistema (ver "Ciclo de vida") |
+| responsable_id | BIGINT | FK `abogado`, obligatorio. `IAbogadoServicio.obtenerAbogadoValido(id, actual)` |
 | clase_contrato_id | BIGINT | FK `clase_contrato` |
 | otra_clase | VARCHAR(150) | Obligatoria solo si la clase es 30 OTROS (`esOtros()`); vacía en cualquier otra |
 | objeto | VARCHAR(390) | Obligatorio |
-| contratista_id | BIGINT | FK `tercero` |
+| contratista_id | BIGINT | FK `tercero` (natural o jurídica). `ITerceroServicio.obtenerTerceroValido(id, actual, rol)` |
 | ordenador_gasto_id | BIGINT | FK `ordenador_gasto` (el periodo). La fecha de suscripción debe caer dentro del periodo |
 | tipo_seguimiento_id | BIGINT | FK `catalogo_item` (TIPO_SEGUIMIENTO) |
 | valor_sin_iva | DECIMAL(18,2) | ≥ 0 |
 | iva | DECIMAL(18,2) | ≥ 0 |
 | plazo_dias | INT | > 0 |
-| fecha_suscripcion | DATE | Dentro del año de la vigencia |
-| fecha_inicio | DATE | Exige fecha de suscripción |
-| fecha_terminacion | DATE | Exige fecha de inicio |
-| fecha_acta_final | DATE | Exige fecha de terminación |
+| numero_pagos | INT | 0 a 999. Los pagos 1 a N serán obligatorios (fase 2) |
+| fecha_suscripcion | DATE | Dentro del año del contrato. Exige el contrato completo |
+| fecha_inicio | DATE | Exige fecha de suscripción y no es anterior a ella |
+| fecha_terminacion | DATE | Exige fecha de inicio y no es anterior a ella |
+| fecha_acta_final | DATE | Exige fecha de terminación y no es anterior a ella |
+| motivo_anulacion | VARCHAR(390) | Solo en ANULADO |
+| fecha_anulacion | DATE | Solo en ANULADO |
+
+- **El número no se guarda**: `ContratoEntity.getNumero()` lo arma con el código de la serie y el consecutivo ("6.1-17.13/023"). Se repite entre años (cada año el consecutivo vuelve a 1), por eso la llave única es (serie, año, consecutivo) y el SIRECI antepone `AN25-` a los de años anteriores.
+- **Creación**: llegan `tipoContratoId`, `anio`, `responsableId` y `objeto`; el resto es opcional. El servicio valida todo y pide el número al final (`generarNumero`, en la misma transacción) para bloquear el consecutivo el menor tiempo posible; si algo falla, el número no se consume. Probado con creaciones simultáneas en H2 y MySQL.
+- **Actualización** (`PUT`): formulario completo (lo que no se envía queda vacío). `tipoContratoId` y `anio` son opcionales y, si vienen distintos, 400. Una relación que no cambia no se vuelve a validar; una que cambia debe estar activa.
+- **No cambian después de crear**: serie, año, consecutivo y tipo.
+- **Aviso de posible fraccionamiento**: la respuesta trae `advertencias` si el contratista tiene otro contrato no anulado en el mismo año. No bloquea.
+- El valor inicial (valor sin IVA + IVA) se calcula en la entidad y la API lo devuelve.
 
 **`contrato_presupuesto`**: 1:1 con contrato.
 
@@ -356,9 +363,30 @@ Naturaleza para el SIRECI (catálogo `NATURALEZA`): sale del tercero, sin guarda
 | dependencia_solicitante_id | BIGINT | FK `dependencia` |
 | naturaleza_gasto | CHAR(3) | I o SPI |
 | tipo_anticipo_id | BIGINT | FK `catalogo_item` (TIPO_ANTICIPO) |
-| porcentaje_anticipo | DECIMAL(5,2) | 0 a 100 |
-| valor_anticipo | DECIMAL(18,2) | 0 si "No pactados"; obligatorio en otro caso |
-| fecha_certificacion_pago | DATE | La llena el FINANCIERO |
+| valor_anticipo | DECIMAL(18,2) | 0 si "No pactados" (código `NO_PACTADO`); en otro caso mayor que 0 y no mayor que el valor inicial. Sin tipo de anticipo no admite valor |
+| fecha_certificacion_pago | DATE | La llena el FINANCIERO (cierre) |
+
+- Se crea vacía junto con el contrato (PK = `contrato_id`, `@MapsId`) y viaja dentro del contrato en la API (`presupuesto`).
+- **El porcentaje de anticipo no se guarda**: valor del anticipo × 100 ÷ valor inicial, 2 decimales.
+- `recursos_de_convenio` verdadero exige `entidad_financiadora_id` y que el tercero tenga NIT (tiene DV); falso o nulo la deja vacía.
+
+**`contrato_observacion`**: observaciones sobre un campo del contrato, escritas por abogados y financiero.
+
+| Campo | Tipo | Llave / regla |
+|---|---|---|
+| id | BIGINT | PK |
+| contrato_id | BIGINT | FK `contrato` |
+| campo | VARCHAR(40) | Código de `CampoContrato` (OBJETO, VALOR_SIN_IVA, RUBRO...). La lista con etiquetas la da `GET /api/contratos/campos` |
+| texto | VARCHAR(390) | Obligatorio |
+| autor_id | BIGINT | FK `usuario`. Nulo hasta que exista el login |
+| resuelta | BOOLEAN | Falso al crear |
+| resuelta_en | DATETIME | |
+| respuesta | VARCHAR(390) | Opcional: cómo se atendió |
+| resuelta_por_id | BIGINT | FK `usuario`. Nulo hasta que exista el login |
+
+- No se editan ni se borran: se resuelven una sola vez (400 la segunda) y, si el problema sigue, se agrega otra. Así queda el historial.
+- Un contrato anulado no admite observaciones nuevas; las suyas se pueden leer y resolver.
+- "Con observaciones" en los filtros significa **con observaciones pendientes**.
 
 **`contrato_sireci`**: 1:1 con contrato, campos que solo pide el SIRECI.
 
@@ -471,7 +499,7 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tablas `catalogo` y `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos), `clasecontrato` (clases SIRECI), `rubro` (rubros presupuestales) y `ordenador` (ordenadores del gasto). Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tablas `catalogo` y `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos), `clasecontrato` (clases SIRECI), `rubro` (rubros presupuestales), `ordenador` (ordenadores del gasto) y `contrato` (contrato, presupuesto y observaciones). Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -497,6 +525,8 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Tipos de contrato (dominio `tipocontrato`): `GET/POST /api/series-documentales`, `GET/PUT /api/series-documentales/{id}`, `PATCH /{id}/estado`, `GET /api/series-documentales/{id}/consecutivos/{anio}` (último número y siguiente; 0 si no hay números, no 404); `GET/POST /api/tipos-contrato?activo=&serieId=`, `GET/PUT /api/tipos-contrato/{id}`, `PATCH /{id}/estado` y `GET /api/tipos-contrato/activos` para selectores (tipo activo con serie activa). `generarNumero` no tiene endpoint: lo usa el dominio de contratos.
 - Clases de contrato SIRECI: `GET /api/clases-contrato?ambito=&activo=` (con `activo=true` para selectores; orden por ámbito y código), `GET/PUT /api/clases-contrato/{id}` (PUT solo cambia el nombre; un código o ámbito distinto en el cuerpo da 400), `POST /api/clases-contrato` y `PATCH /{id}/estado`.
 - Rubros presupuestales: `GET /api/rubros?texto=&activo=&pagina=&tamanio=` (`texto` = prefijo del código o contenido del nombre; con `activo=true` para selectores; orden numérico por código), `GET/PUT /api/rubros/{id}` (el código no cambia si hay contratos: 400; si choca con otro: 409), `POST /api/rubros` y `PATCH /{id}/estado`. Respuesta con `codigo`, `nombre`, `etiqueta` ("1052002 - Museo de Historia Natural") y `codigoEditable`.
+- Contratos: `POST /api/contratos`, `GET/PUT /api/contratos/{id}`, `PATCH /{id}/cierre`, `PATCH /{id}/anular` con `{"motivo": ...}`, `GET /api/contratos?numero=&anio=&estado=&tipoContratoId=&claseContratoId=&responsableId=&contratista=&texto=&pagina=&tamanio=` (`numero` completo, solo el consecutivo o solo la serie; `contratista` = prefijo del documento o parte del nombre; `texto` = parte del objeto; orden: año y consecutivo descendentes) y `GET /api/abogados/{abogadoId}/contratos?inicioDesde=&inicioHasta=&terminacionDesde=&terminacionHasta=&conObservaciones=&estado=&anio=&pagina=&tamanio=` (vive en el dominio contrato; 404 si el abogado no existe; un rango invertido da 400). Las filas traen `observacionesPendientes`.
+- Observaciones: `GET /api/contratos/campos`, `POST /api/contratos/{id}/observaciones` con `{"campo", "texto"}`, `GET /api/contratos/{id}/observaciones?campo=&resuelta=` (la más reciente primero), `PATCH /{id}/observaciones/{obsId}/resolver` con `{"respuesta"}` opcional y `GET /{id}/observaciones/conteo` (`total`, `pendientes` y `porCampo` en el orden del formulario).
 - Ordenadores del gasto: `GET /api/ordenadores-gasto?vigenteEn=AAAA-MM-DD&texto=&activo=` (`vigenteEn` para los selectores del contrato: periodos activos que cubren esa fecha; `texto` = nombre, cédula o cargo), `GET/PUT /api/ordenadores-gasto/{id}`, `POST /api/ordenadores-gasto`, `PATCH /{id}/cerrar` con `{"fechaHasta": ...}` y `PATCH /{id}/estado`.
 - Catálogos: `GET /api/catalogos?activo=`, `GET/PUT /api/catalogos/{codigo}` (un código distinto en el cuerpo da 400), `POST /api/catalogos` y `PATCH /{codigo}/estado`. Ítems: `GET /api/catalogos/{codigo}/items?activo=true` (selectores), `GET/PUT /api/catalogos/{codigo}/items/{id}` (un ítem de otro catálogo da 404; un código distinto en el cuerpo da 400), `POST /api/catalogos/{codigo}/items` y `PATCH /{id}/estado`. Ya no existe `/api/catalogo-items`.
 - Errores HTTP: 400 (validación o regla de negocio), 404 (no existe), 409 (duplicado), 415 (cuerpo que no es `application/json`).

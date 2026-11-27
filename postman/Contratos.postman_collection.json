@@ -1,0 +1,2140 @@
+{
+  "info": {
+    "name": "Contratación VRI - Contratos",
+    "description": "Pruebas del contrato: creación y numeración, datos del abogado, reglas, estados, cierre del financiero, anulación, observaciones por campo y búsquedas. Ejecutar COMPLETA y EN ORDEN (Collection Runner o newman).\n\nCada ejecución crea su propia serie documental (99.<sufijo>-1) y su tipo de contrato, para no gastar los números reales de las series de la VRI, además de un abogado, terceros, un periodo de ordenador y un proyecto. Al final anula el contrato que quedó en trámite e inactiva la serie, el tipo, el ordenador y el abogado de prueba.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api"
+    },
+    {
+      "key": "sufijo",
+      "value": ""
+    },
+    {
+      "key": "anio",
+      "value": ""
+    },
+    {
+      "key": "codigoSerie",
+      "value": ""
+    },
+    {
+      "key": "serieId",
+      "value": ""
+    },
+    {
+      "key": "tipoId",
+      "value": ""
+    },
+    {
+      "key": "cedulaId",
+      "value": ""
+    },
+    {
+      "key": "nitId",
+      "value": ""
+    },
+    {
+      "key": "supervisorId",
+      "value": ""
+    },
+    {
+      "key": "noPactadoId",
+      "value": ""
+    },
+    {
+      "key": "anticipoId",
+      "value": ""
+    },
+    {
+      "key": "fuenteId",
+      "value": ""
+    },
+    {
+      "key": "claseServiciosId",
+      "value": ""
+    },
+    {
+      "key": "claseOtrosId",
+      "value": ""
+    },
+    {
+      "key": "rubroId",
+      "value": ""
+    },
+    {
+      "key": "dependenciaId",
+      "value": ""
+    },
+    {
+      "key": "usuarioId",
+      "value": ""
+    },
+    {
+      "key": "abogadoId",
+      "value": ""
+    },
+    {
+      "key": "contratistaId",
+      "value": ""
+    },
+    {
+      "key": "terceroOrdenadorId",
+      "value": ""
+    },
+    {
+      "key": "entidadId",
+      "value": ""
+    },
+    {
+      "key": "entidadDv",
+      "value": ""
+    },
+    {
+      "key": "ordenadorId",
+      "value": ""
+    },
+    {
+      "key": "proyectoId",
+      "value": ""
+    },
+    {
+      "key": "contrato1",
+      "value": ""
+    },
+    {
+      "key": "contrato2",
+      "value": ""
+    },
+    {
+      "key": "contrato3",
+      "value": ""
+    },
+    {
+      "key": "obs1",
+      "value": ""
+    },
+    {
+      "key": "obs2",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Preparar: serie de prueba",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Serie y tipo propios de esta ejecución: así no se gastan los números reales de las series de la VRI.",
+                  "const sufijo = Date.now().toString().slice(-8);",
+                  "pm.collectionVariables.set('sufijo', sufijo);",
+                  "pm.collectionVariables.set('codigoSerie', '99.' + sufijo + '-1');",
+                  "pm.collectionVariables.set('anio', new Date().getFullYear());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('serieId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/series-documentales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigoSerie}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Preparar: tipo de contrato de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('tipoId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/tipos-contrato",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Prueba contratos C{{sufijo}}\",\n  \"serieId\": {{serieId}}\n}"
+            }
+          }
+        },
+        {
+          "name": "Ítem CC de TIPO_IDENTIFICACION",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const i = r.find(x => x.codigo === 'CC');",
+                  "pm.test('Existe el ítem CC', () => pm.expect(i).to.exist);",
+                  "pm.collectionVariables.set('cedulaId', i.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/catalogos/TIPO_IDENTIFICACION/items?activo=true"
+          }
+        },
+        {
+          "name": "Ítem NIT de TIPO_IDENTIFICACION",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const i = r.find(x => x.codigo === 'NIT');",
+                  "pm.test('Existe el ítem NIT', () => pm.expect(i).to.exist);",
+                  "pm.collectionVariables.set('nitId', i.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/catalogos/TIPO_IDENTIFICACION/items?activo=true"
+          }
+        },
+        {
+          "name": "Ítem SUPERVISOR de TIPO_SEGUIMIENTO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const i = r.find(x => x.codigo === 'SUPERVISOR');",
+                  "pm.test('Existe el ítem SUPERVISOR', () => pm.expect(i).to.exist);",
+                  "pm.collectionVariables.set('supervisorId', i.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/catalogos/TIPO_SEGUIMIENTO/items?activo=true"
+          }
+        },
+        {
+          "name": "Ítem NO_PACTADO de TIPO_ANTICIPO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const i = r.find(x => x.codigo === 'NO_PACTADO');",
+                  "pm.test('Existe el ítem NO_PACTADO', () => pm.expect(i).to.exist);",
+                  "pm.collectionVariables.set('noPactadoId', i.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/catalogos/TIPO_ANTICIPO/items?activo=true"
+          }
+        },
+        {
+          "name": "Ítem ANTICIPO de TIPO_ANTICIPO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const i = r.find(x => x.codigo === 'ANTICIPO');",
+                  "pm.test('Existe el ítem ANTICIPO', () => pm.expect(i).to.exist);",
+                  "pm.collectionVariables.set('anticipoId', i.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/catalogos/TIPO_ANTICIPO/items?activo=true"
+          }
+        },
+        {
+          "name": "Fuente de financiación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('fuenteId', r[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/catalogos/FUENTE_FINANCIACION/items?activo=true"
+          }
+        },
+        {
+          "name": "Clases SIRECI 23 y 30",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('claseServiciosId', r.find(c => c.codigoSireci === 23).id);",
+                  "pm.collectionVariables.set('claseOtrosId', r.find(c => c.codigoSireci === 30).id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/clases-contrato?ambito=CONTRATO&activo=true"
+          }
+        },
+        {
+          "name": "Rubro",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('rubroId', r.contenido[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/rubros?activo=true&tamanio=1"
+          }
+        },
+        {
+          "name": "Dependencia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('dependenciaId', r[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/dependencias?activo=true"
+          }
+        },
+        {
+          "name": "Preparar: usuario abogado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('usuarioId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/usuarios",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"contratos{{sufijo}}@unicauca.edu.co\",\n  \"nombre\": \"Abogada de prueba\",\n  \"rol\": \"ABOGADO\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Preparar: abogado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('abogadoId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/abogados",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuarioId\": {{usuarioId}},\n  \"tipoIdentificacionId\": {{cedulaId}},\n  \"numeroDocumento\": \"8{{sufijo}}\",\n  \"nombres\": \"Laura\",\n  \"apellidos\": \"Contratos C{{sufijo}}\",\n  \"tipoVinculacion\": \"PLANTA\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Preparar: contratista (persona natural)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('contratistaId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/terceros/naturales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{cedulaId}},\n  \"numeroDocumento\": \"7{{sufijo}}\",\n  \"nombres\": \"Ana María\",\n  \"apellidos\": \"Contratista C{{sufijo}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Preparar: ordenador (persona natural)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('terceroOrdenadorId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/terceros/naturales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{cedulaId}},\n  \"numeroDocumento\": \"6{{sufijo}}\",\n  \"nombres\": \"Francisco\",\n  \"apellidos\": \"Ordenador C{{sufijo}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Preparar: entidad financiadora (NIT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('entidadId', r.id);",
+                  "pm.collectionVariables.set('entidadDv', r.dv);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/terceros/juridicas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoIdentificacionId\": {{nitId}},\n  \"numeroDocumento\": \"9{{sufijo}}\",\n  \"razonSocial\": \"Entidad financiadora C{{sufijo}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Preparar: periodo del ordenador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ordenadorId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/ordenadores-gasto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"terceroId\": {{terceroOrdenadorId}},\n  \"cargo\": \"Vicerrector de prueba C{{sufijo}}\",\n  \"fechaDesde\": \"{{anio}}-01-01\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Preparar: proyecto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('proyectoId', pm.response.json().idProyecto);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/proyectos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProyecto\": 1{{sufijo}},\n  \"nombre\": \"Proyecto de contratos C{{sufijo}}\",\n  \"directorTerceroId\": {{contratistaId}}\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Crear y numerar",
+      "item": [
+        {
+          "name": "1.1 Crear con lo mínimo: queda en trámite con el primer número",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('Número 001 de la serie de prueba', () => pm.expect(r.numero).to.eql(pm.collectionVariables.get('codigoSerie') + '/001'));",
+                  "pm.test('En trámite y con el objeto limpio', () => {",
+                  "    pm.expect(r.estado).to.eql('EN_TRAMITE');",
+                  "    pm.expect(r.objeto).to.eql('Apoyo al proyecto C' + pm.collectionVariables.get('sufijo'));",
+                  "    pm.expect(r.presupuesto.rubroId).to.be.null;",
+                  "});",
+                  "pm.test('Trae Location', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/contratos/' + r.id));",
+                  "pm.collectionVariables.set('contrato1', r.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoContratoId\": {{tipoId}},\n  \"anio\": {{anio}},\n  \"responsableId\": {{abogadoId}},\n  \"objeto\": \"  Apoyo   al proyecto C{{sufijo}} \"\n}"
+            }
+          }
+        },
+        {
+          "name": "1.2 Crear otro: recibe el siguiente número",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('Número 002', () => pm.expect(r.numero).to.eql(pm.collectionVariables.get('codigoSerie') + '/002'));",
+                  "pm.collectionVariables.set('contrato2', r.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoContratoId\": {{tipoId}},\n  \"anio\": {{anio}},\n  \"responsableId\": {{abogadoId}},\n  \"objeto\": \"  Apoyo   al proyecto C{{sufijo}} \"\n}"
+            }
+          }
+        },
+        {
+          "name": "1.3 Rechazar datos inválidos (otra clase sin ser 30 OTROS)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica la regla', () => pm.expect(pm.response.json().mensaje).to.include('solo aplica cuando la clase es 30 OTROS'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoContratoId\": {{tipoId}},\n  \"anio\": {{anio}},\n  \"responsableId\": {{abogadoId}},\n  \"objeto\": \"Inválido\",\n  \"claseContratoId\": {{claseServiciosId}},\n  \"otraClase\": \"No aplica\"\n}"
+            }
+          }
+        },
+        {
+          "name": "1.4 El número del intento fallido no se consumió",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('Número 003 (no 004)', () => pm.expect(r.numero).to.eql(pm.collectionVariables.get('codigoSerie') + '/003'));",
+                  "pm.collectionVariables.set('contrato3', r.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoContratoId\": {{tipoId}},\n  \"anio\": {{anio}},\n  \"responsableId\": {{abogadoId}},\n  \"objeto\": \"  Apoyo   al proyecto C{{sufijo}} \"\n}"
+            }
+          }
+        },
+        {
+          "name": "1.5 Rechazar un año que no es el actual ni el anterior",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica los años permitidos', () => pm.expect(pm.response.json().mensaje).to.include('Solo se pueden crear contratos'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoContratoId\": {{tipoId}},\n  \"anio\": 2000,\n  \"responsableId\": {{abogadoId}},\n  \"objeto\": \"Viejo\"\n}"
+            }
+          }
+        },
+        {
+          "name": "1.6 Exigir tipo, año, responsable y objeto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const r = pm.response.json();",
+                  "pm.test('Detalla los cuatro campos', () => pm.expect(Object.keys(r.errores)).to.have.members(['tipoContratoId', 'anio', 'responsableId', 'objeto']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "1.7 Consultar por id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Es el contrato 001', () => pm.expect(pm.response.json().numero).to.eql(pm.collectionVariables.get('codigoSerie') + '/001'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}"
+          }
+        },
+        {
+          "name": "1.8 Contrato inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos/999999999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Datos del abogado y reglas",
+      "item": [
+        {
+          "name": "2.1 La suscripción exige el contrato completo",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "enviar({ responsableId: v('abogadoId'), objeto: 'Incompleto', fechaSuscripcion: anio + '-03-10' });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Dice qué falta', () => pm.expect(pm.response.json().mensaje).to.include('Para registrar la suscripción faltan: clase de contrato, contratista'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        },
+        {
+          "name": "2.2 La clase 30 OTROS exige describirla",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "const c = completo(); c.claseContratoId = v('claseOtrosId'); enviar(c);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica la regla', () => pm.expect(pm.response.json().mensaje).to.include('exige describir la otra clase'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        },
+        {
+          "name": "2.3 Recursos de convenio exigen una entidad con NIT",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "const c = completo(); c.presupuesto.recursosDeConvenio = true; c.presupuesto.entidadFinanciadoraId = v('contratistaId'); enviar(c);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Exige NIT', () => pm.expect(pm.response.json().mensaje).to.include('debe tener NIT'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        },
+        {
+          "name": "2.4 Anticipo 'No pactados' exige valor 0",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "const c = completo(); c.presupuesto.valorAnticipo = 500; enviar(c);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica la regla', () => pm.expect(pm.response.json().mensaje).to.include('el valor del anticipo debe ser 0'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        },
+        {
+          "name": "2.5 Suscribir con todos los datos: calcula valor inicial y porcentaje de anticipo",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "const c = completo();",
+                  "c.iva = 1900000;",
+                  "c.fechaSuscripcion = anio + '-03-10';",
+                  "c.presupuesto.recursosDeConvenio = true;",
+                  "c.presupuesto.entidadFinanciadoraId = v('entidadId');",
+                  "c.presupuesto.tipoAnticipoId = v('anticipoId');",
+                  "c.presupuesto.valorAnticipo = 2975000;",
+                  "enviar(c);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Pasa a SUSCRITO', () => pm.expect(r.estado).to.eql('SUSCRITO'));",
+                  "pm.test('Valor inicial = sin IVA + IVA', () => pm.expect(r.valorInicial).to.eql(11900000));",
+                  "pm.test('Porcentaje de anticipo calculado (25 %)', () => pm.expect(r.presupuesto.porcentajeAnticipo).to.eql(25));",
+                  "pm.test('Entidad con su NIT y DV', () => {",
+                  "    pm.expect(r.presupuesto.entidadFinanciadoraNit).to.eql('9' + pm.collectionVariables.get('sufijo'));",
+                  "    pm.expect(r.presupuesto.entidadFinanciadoraDv).to.eql(pm.collectionVariables.get('entidadDv'));",
+                  "});",
+                  "pm.test('Datos del ordenador listos para el SIRECI', () => pm.expect(r.ordenadorCargo).to.eql('Vicerrector de prueba C' + pm.collectionVariables.get('sufijo')));",
+                  "pm.test('Dependencia de afectación = nombre del rubro', () => pm.expect(r.presupuesto.dependenciaAfectacion).to.be.a('string').and.not.empty);",
+                  "pm.test('Sin advertencias: es su primer contrato', () => pm.expect(r.advertencias).to.eql([]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        },
+        {
+          "name": "2.6 El tipo de contrato no cambia",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "const c = completo(); c.tipoContratoId = 999999; enviar(c);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que depende de la serie', () => pm.expect(pm.response.json().mensaje).to.include('El tipo de contrato no se puede cambiar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        },
+        {
+          "name": "2.7 Con la fecha de inicio pasa a EN_EJECUCION",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "const c = completo();",
+                  "c.iva = 1900000;",
+                  "c.fechaSuscripcion = anio + '-03-10';",
+                  "c.fechaInicio = anio + '-03-12';",
+                  "c.presupuesto.tipoAnticipoId = v('anticipoId');",
+                  "c.presupuesto.valorAnticipo = 2975000;",
+                  "enviar(c);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('En ejecución', () => pm.expect(pm.response.json().estado).to.eql('EN_EJECUCION'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        },
+        {
+          "name": "2.8 Mismo contratista en otro contrato: avisa posible fraccionamiento sin bloquear",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "enviar({ responsableId: v('abogadoId'), objeto: 'Segundo contrato C' + pm.collectionVariables.get('sufijo'), contratistaId: v('contratistaId') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Advierte con el número del otro contrato', () => {",
+                  "    pm.expect(r.advertencias).to.have.lengthOf(1);",
+                  "    pm.expect(r.advertencias[0]).to.include(pm.collectionVariables.get('codigoSerie') + '/001').and.include('posible fraccionamiento');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Cierre y anulación",
+      "item": [
+        {
+          "name": "3.1 El acta final exige la terminación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica la cadena de fechas', () => pm.expect(pm.response.json().mensaje).to.eql('La fecha de acta final exige la fecha de terminación'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}/cierre",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fechaActaFinal\": \"{{anio}}-07-25\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3.2 El financiero registra el cierre: LIQUIDADO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Liquidado con sus fechas', () => {",
+                  "    pm.expect(r.estado).to.eql('LIQUIDADO');",
+                  "    pm.expect(r.presupuesto.fechaCertificacionPago).to.eql(pm.collectionVariables.get('anio') + '-07-20');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}/cierre",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fechaTerminacion\": \"{{anio}}-07-10\",\n  \"fechaActaFinal\": \"{{anio}}-07-25\",\n  \"fechaCertificacionPago\": \"{{anio}}-07-20\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3.3 Un contrato suscrito no se anula",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Solo en trámite', () => pm.expect(pm.response.json().mensaje).to.include('Solo se puede anular un contrato en trámite'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}/anular",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"Error\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3.4 Anular un contrato en trámite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Anulado con su motivo y fecha', () => {",
+                  "    pm.expect(r.estado).to.eql('ANULADO');",
+                  "    pm.expect(r.motivoAnulacion).to.eql('El contratista desistió');",
+                  "    pm.expect(r.fechaAnulacion).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato3}}/anular",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"  El contratista   desistió \"\n}"
+            }
+          }
+        },
+        {
+          "name": "3.5 Un contrato anulado no se modifica",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que está anulado', () => pm.expect(pm.response.json().mensaje).to.include('está anulado y no se puede modificar'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato3}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoContratoId\": {{tipoId}},\n  \"anio\": {{anio}},\n  \"responsableId\": {{abogadoId}},\n  \"objeto\": \"  Apoyo   al proyecto C{{sufijo}} \"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Observaciones por campo",
+      "item": [
+        {
+          "name": "4.1 Campos observables",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Incluye VALOR_SIN_IVA con su etiqueta', () => pm.expect(r.find(c => c.codigo === 'VALOR_SIN_IVA').etiqueta).to.eql('Valor sin IVA'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos/campos"
+          }
+        },
+        {
+          "name": "4.2 Agregar observación a un campo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('Pendiente, con el campo y su etiqueta', () => {",
+                  "    pm.expect(r.campo).to.eql('VALOR_SIN_IVA');",
+                  "    pm.expect(r.campoEtiqueta).to.eql('Valor sin IVA');",
+                  "    pm.expect(r.texto).to.eql('No coincide con el CDP');",
+                  "    pm.expect(r.resuelta).to.be.false;",
+                  "});",
+                  "pm.collectionVariables.set('obs1', r.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campo\": \"valor_sin_iva\",\n  \"texto\": \"  No coincide   con el CDP \"\n}"
+            }
+          }
+        },
+        {
+          "name": "4.3 Segunda observación del mismo campo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('obs2', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campo\": \"VALOR_SIN_IVA\",\n  \"texto\": \"Falta el soporte\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4.4 Observación de otro campo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campo\": \"OBJETO\",\n  \"texto\": \"Precisar el alcance\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4.5 Rechazar un campo que no existe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Remite a la lista de campos', () => pm.expect(pm.response.json().mensaje).to.include('GET /api/contratos/campos'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campo\": \"COLOR\",\n  \"texto\": \"x\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4.6 Ver las observaciones de un campo (la más reciente primero)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Las dos del campo, en orden', () => pm.expect(pm.response.json().map(o => o.id)).to.eql([Number(pm.collectionVariables.get('obs2')), Number(pm.collectionVariables.get('obs1'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones?campo=VALOR_SIN_IVA"
+          }
+        },
+        {
+          "name": "4.7 Resolver una observación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Resuelta con su respuesta', () => {",
+                  "    pm.expect(r.resuelta).to.be.true;",
+                  "    pm.expect(r.respuesta).to.eql('Se corrigió según el CDP');",
+                  "    pm.expect(r.resueltaEn).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones/{{obs1}}/resolver",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"respuesta\": \"Se corrigió según el CDP\"\n}"
+            }
+          }
+        },
+        {
+          "name": "4.8 No se resuelve dos veces",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones/{{obs1}}/resolver",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "4.9 Conteo por campo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('3 en total, 2 pendientes', () => { pm.expect(r.total).to.eql(3); pm.expect(r.pendientes).to.eql(2); });",
+                  "pm.test('Por campo', () => pm.expect(r.porCampo).to.eql({ OBJETO: { total: 1, pendientes: 1 }, VALOR_SIN_IVA: { total: 2, pendientes: 1 } }));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones/conteo"
+          }
+        },
+        {
+          "name": "4.10 Solo las pendientes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Dos pendientes', () => pm.expect(pm.response.json()).to.have.lengthOf(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/observaciones?resuelta=false"
+          }
+        },
+        {
+          "name": "4.11 Un contrato anulado no admite observaciones nuevas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que está anulado', () => pm.expect(pm.response.json().mensaje).to.include('no admite observaciones nuevas'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato3}}/observaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campo\": \"OBJETO\",\n  \"texto\": \"x\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Búsquedas",
+      "item": [
+        {
+          "name": "5.1 Buscar por número completo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo el contrato 002', () => pm.expect(pm.response.json().contenido.map(c => c.id)).to.eql([Number(pm.collectionVariables.get('contrato2'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos?numero={{codigoSerie}}/002"
+          }
+        },
+        {
+          "name": "5.2 Listar por tipo: del más reciente al más antiguo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('003, 002 y 001', () => pm.expect(r.contenido.map(c => c.id)).to.eql([Number(pm.collectionVariables.get('contrato3')), Number(pm.collectionVariables.get('contrato2')), Number(pm.collectionVariables.get('contrato1'))]));",
+                  "pm.test('Página con totales', () => { pm.expect(r.totalElementos).to.eql(3); pm.expect(r.pagina).to.eql(0); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos?tipoContratoId={{tipoId}}"
+          }
+        },
+        {
+          "name": "5.3 Filtrar por estado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo el liquidado', () => pm.expect(pm.response.json().contenido.map(c => c.id)).to.eql([Number(pm.collectionVariables.get('contrato1'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos?tipoContratoId={{tipoId}}&estado=LIQUIDADO"
+          }
+        },
+        {
+          "name": "5.4 Filtrar por documento del contratista",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Los dos contratos de Ana', () => pm.expect(pm.response.json().contenido.map(c => c.id)).to.eql([Number(pm.collectionVariables.get('contrato2')), Number(pm.collectionVariables.get('contrato1'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/contratos?tipoContratoId={{tipoId}}&contratista=7{{sufijo}}"
+          }
+        },
+        {
+          "name": "5.5 Contratos del abogado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Sus 3 contratos', () => pm.expect(pm.response.json().totalElementos).to.eql(3));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/{{abogadoId}}/contratos"
+          }
+        },
+        {
+          "name": "5.6 Contratos del abogado con observaciones pendientes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Solo el 002', () => pm.expect(r.contenido.map(c => c.id)).to.eql([Number(pm.collectionVariables.get('contrato2'))]));",
+                  "pm.test('Con sus 2 pendientes', () => pm.expect(r.contenido[0].observacionesPendientes).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/{{abogadoId}}/contratos?conObservaciones=true"
+          }
+        },
+        {
+          "name": "5.7 Contratos del abogado sin observaciones pendientes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('El 003 y el 001', () => pm.expect(pm.response.json().contenido.map(c => c.id)).to.eql([Number(pm.collectionVariables.get('contrato3')), Number(pm.collectionVariables.get('contrato1'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/{{abogadoId}}/contratos?conObservaciones=false"
+          }
+        },
+        {
+          "name": "5.8 Por rango de fecha de inicio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('El que inició en marzo', () => pm.expect(pm.response.json().contenido.map(c => c.id)).to.eql([Number(pm.collectionVariables.get('contrato1'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/{{abogadoId}}/contratos?inicioDesde={{anio}}-03-01&inicioHasta={{anio}}-03-31"
+          }
+        },
+        {
+          "name": "5.9 Por rango de fecha de terminación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('El que terminó en julio', () => pm.expect(pm.response.json().contenido.map(c => c.id)).to.eql([Number(pm.collectionVariables.get('contrato1'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/{{abogadoId}}/contratos?terminacionDesde={{anio}}-07-01&terminacionHasta={{anio}}-07-31"
+          }
+        },
+        {
+          "name": "5.10 Rechazar un rango invertido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica el rango', () => pm.expect(pm.response.json().mensaje).to.include('no puede ser anterior a la fecha desde'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/{{abogadoId}}/contratos?inicioDesde={{anio}}-03-31&inicioHasta={{anio}}-03-01"
+          }
+        },
+        {
+          "name": "5.11 Abogado inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/999999999/contratos"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Limpieza",
+      "item": [
+        {
+          "name": "6.1 Anular el contrato 002 (queda en trámite)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato2}}/anular",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"Prueba de Postman\"\n}"
+            }
+          }
+        },
+        {
+          "name": "6.2 Inactivar el tipo de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/tipos-contrato/{{tipoId}}/estado?activo=false"
+          }
+        },
+        {
+          "name": "6.3 Inactivar la serie de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/series-documentales/{{serieId}}/estado?activo=false"
+          }
+        },
+        {
+          "name": "6.4 Inactivar el periodo del ordenador de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/ordenadores-gasto/{{ordenadorId}}/estado?activo=false"
+          }
+        },
+        {
+          "name": "6.5 Inactivar el abogado de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/abogados/{{abogadoId}}/estado?activo=false"
+          }
+        }
+      ]
+    }
+  ]
+}

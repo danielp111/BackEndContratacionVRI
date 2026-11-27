@@ -6,7 +6,7 @@ import co.edu.unicauca.contratacionvri.tipocontrato.fachadaServicios.DTORespuest
 /** Numeración de contratos: un consecutivo por serie documental y año. */
 public interface INumeracionServicio {
 
-    /** Años aceptados mientras no exista la tabla vigencia. */
+    /** Años aceptados (no hay tabla de vigencias: el año es un número). */
     int ANIO_MINIMO = 2000;
     int ANIO_MAXIMO = 2100;
 

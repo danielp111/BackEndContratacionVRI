@@ -17,6 +17,7 @@ import co.edu.unicauca.contratacionvri.comun.utilidades.Textos;
 import co.edu.unicauca.contratacionvri.dependencia.fachadaServicios.servicios.IDependenciaServicio;
 import co.edu.unicauca.contratacionvri.excepciones.excepcionesPropias.EntidadNoExisteException;
 import co.edu.unicauca.contratacionvri.excepciones.excepcionesPropias.EntidadYaExisteException;
+import co.edu.unicauca.contratacionvri.excepciones.excepcionesPropias.ReglaNegocioException;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.Rol;
 import co.edu.unicauca.contratacionvri.usuario.accesoADatos.modelos.UsuarioEntity;
 import co.edu.unicauca.contratacionvri.usuario.fachadaServicios.servicios.IUsuarioServicio;
@@ -116,6 +117,19 @@ public class AbogadoServicioImpl implements IAbogadoServicio {
         AbogadoEntity abogado = buscar(id);
         abogado.setActivo(activo);
         return aRespuesta(repositorio.save(abogado));
+    }
+
+    @Override
+    public AbogadoEntity obtenerAbogadoValido(Long id, AbogadoEntity actual) {
+        if (actual != null && Objects.equals(actual.getId(), id)) {
+            return actual;
+        }
+        AbogadoEntity abogado = repositorio.findById(id).orElseThrow(() ->
+                new ReglaNegocioException("El abogado responsable con id " + id + " no existe"));
+        if (!Boolean.TRUE.equals(abogado.getActivo())) {
+            throw new ReglaNegocioException("El abogado " + abogado.getNombres() + " " + abogado.getApellidos() + " está inactivo");
+        }
+        return abogado;
     }
 
     /**
