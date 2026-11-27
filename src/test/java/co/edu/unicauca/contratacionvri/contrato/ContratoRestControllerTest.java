@@ -115,14 +115,14 @@ class ContratoRestControllerTest extends ContratoPruebaBase {
         }
 
         @Test
-        void conTodosLosDatosYLaSuscripcionQuedaSuscritoConSusCalculados() throws Exception {
+        void conTodosLosDatosYElSupervisorLaSuscripcionQuedaSuscritaConSusCalculados() throws Exception {
             Map<String, Object> p = completo();
             p.put("iva", 1900000);
             p.put("fechaSuscripcion", fecha(3, 10));
             presupuestoDe(p).put("tipoAnticipoId", anticipo.getId());
             presupuestoDe(p).put("valorAnticipo", 1190000);
-            enviar("POST", URL, p)
-                    .andExpect(status().isCreated())
+            crearYSuscribir(p)
+                    .andExpect(status().isOk())
                     .andExpect(jsonPath("$.estado").value("SUSCRITO"))
                     .andExpect(jsonPath("$.valorInicial").value(11900000.0))
                     .andExpect(jsonPath("$.claseContratoEtiqueta").value("23 PRESTACIÓN DE SERVICIOS"))
@@ -340,8 +340,10 @@ class ContratoRestControllerTest extends ContratoPruebaBase {
 
         @Test
         void elEstadoSigueLasFechasHastaLiquidado() throws Exception {
-            long id = crearContratoId(minimo());
             Map<String, Object> p = completo();
+            long id = crearContratoId(p);
+            designarSupervisor(id);
+            p.put("numeroPagos", 1);
             p.put("fechaSuscripcion", fecha(3, 10));
             enviar("PUT", URL + "/" + id, p).andExpect(jsonPath("$.estado").value("SUSCRITO"));
             p.put("fechaInicio", fecha(3, 12));
@@ -349,6 +351,7 @@ class ContratoRestControllerTest extends ContratoPruebaBase {
 
             enviar("PATCH", URL + "/" + id + "/cierre", Map.of("fechaTerminacion", fecha(7, 10)))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("TERMINADO"));
+            pagar(id, 10000000, fecha(7, 15));
             enviar("PATCH", URL + "/" + id + "/cierre", Map.of("fechaTerminacion", fecha(7, 10),
                     "fechaActaFinal", fecha(7, 25), "fechaCertificacionPago", fecha(7, 20)))
                     .andExpect(status().isOk())
@@ -367,7 +370,7 @@ class ContratoRestControllerTest extends ContratoPruebaBase {
             p.put("fechaSuscripcion", fecha(3, 10));
             p.put("fechaInicio", fecha(3, 12));
             p.put("fechaTerminacion", fecha(7, 10));
-            enviar("POST", URL, p).andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("TERMINADO"));
+            crearYSuscribir(p).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("TERMINADO"));
         }
 
         @Test
@@ -416,7 +419,7 @@ class ContratoRestControllerTest extends ContratoPruebaBase {
         void soloSeAnulaEnTramiteYConMotivo() throws Exception {
             Map<String, Object> p = completo();
             p.put("fechaSuscripcion", fecha(3, 10));
-            long id = crearContratoId(p);
+            long id = crearSuscritoId(p);
             enviar("PATCH", URL + "/" + id + "/anular", Map.of("motivo", "Error"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.mensaje").value("Solo se puede anular un contrato en trámite; el contrato 6.1-17.13/001 está SUSCRITO"));

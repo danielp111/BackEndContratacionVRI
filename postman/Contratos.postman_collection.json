@@ -856,7 +856,7 @@
                   "        contratistaId: v('contratistaId'),",
                   "        ordenadorGastoId: v('ordenadorId'),",
                   "        tipoSeguimientoId: v('supervisorId'),",
-                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
                   "        presupuesto: {",
                   "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
                   "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
@@ -915,7 +915,7 @@
                   "        contratistaId: v('contratistaId'),",
                   "        ordenadorGastoId: v('ordenadorId'),",
                   "        tipoSeguimientoId: v('supervisorId'),",
-                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
                   "        presupuesto: {",
                   "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
                   "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
@@ -974,7 +974,7 @@
                   "        contratistaId: v('contratistaId'),",
                   "        ordenadorGastoId: v('ordenadorId'),",
                   "        tipoSeguimientoId: v('supervisorId'),",
-                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
                   "        presupuesto: {",
                   "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
                   "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
@@ -1033,7 +1033,7 @@
                   "        contratistaId: v('contratistaId'),",
                   "        ordenadorGastoId: v('ordenadorId'),",
                   "        tipoSeguimientoId: v('supervisorId'),",
-                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
                   "        presupuesto: {",
                   "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
                   "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
@@ -1075,6 +1075,92 @@
           }
         },
         {
+          "name": "2.5a Guardar el tipo de seguimiento y designar el supervisor (la suscripción lo exige)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const anio = Number(pm.collectionVariables.get('anio'));",
+                  "const v = k => Number(pm.collectionVariables.get(k));",
+                  "function completo() {",
+                  "    return {",
+                  "        responsableId: v('abogadoId'),",
+                  "        objeto: 'Prestar servicios profesionales de apoyo C' + pm.collectionVariables.get('sufijo'),",
+                  "        claseContratoId: v('claseServiciosId'),",
+                  "        contratistaId: v('contratistaId'),",
+                  "        ordenadorGastoId: v('ordenadorId'),",
+                  "        tipoSeguimientoId: v('supervisorId'),",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
+                  "        presupuesto: {",
+                  "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
+                  "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
+                  "            dependenciaSolicitanteId: v('dependenciaId'), naturalezaGasto: 'SPI',",
+                  "            tipoAnticipoId: v('noPactadoId')",
+                  "        }",
+                  "    };",
+                  "}",
+                  "function enviar(cuerpo) { pm.variables.set('cuerpo', JSON.stringify(cuerpo)); }",
+                  "",
+                  "enviar(completo());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{{cuerpo}}"
+            }
+          }
+        },
+        {
+          "name": "2.5b Designar el supervisor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}/seguimientos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rol\": \"SUPERVISOR\",\n  \"terceroId\": {{terceroOrdenadorId}},\n  \"desde\": \"{{anio}}-03-10\"\n}"
+            }
+          }
+        },
+        {
           "name": "2.5 Suscribir con todos los datos: calcula valor inicial y porcentaje de anticipo",
           "event": [
             {
@@ -1092,7 +1178,7 @@
                   "        contratistaId: v('contratistaId'),",
                   "        ordenadorGastoId: v('ordenadorId'),",
                   "        tipoSeguimientoId: v('supervisorId'),",
-                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
                   "        presupuesto: {",
                   "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
                   "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
@@ -1168,7 +1254,7 @@
                   "        contratistaId: v('contratistaId'),",
                   "        ordenadorGastoId: v('ordenadorId'),",
                   "        tipoSeguimientoId: v('supervisorId'),",
-                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
                   "        presupuesto: {",
                   "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
                   "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
@@ -1227,7 +1313,7 @@
                   "        contratistaId: v('contratistaId'),",
                   "        ordenadorGastoId: v('ordenadorId'),",
                   "        tipoSeguimientoId: v('supervisorId'),",
-                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
                   "        presupuesto: {",
                   "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
                   "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
@@ -1292,7 +1378,7 @@
                   "        contratistaId: v('contratistaId'),",
                   "        ordenadorGastoId: v('ordenadorId'),",
                   "        tipoSeguimientoId: v('supervisorId'),",
-                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 4,",
+                  "        valorSinIva: 10000000, iva: 0, plazoDias: 120, numeroPagos: 1,",
                   "        presupuesto: {",
                   "            rubroId: v('rubroId'), proyectoId: v('proyectoId'), paa: 'PAA-15',",
                   "            fuenteFinanciacionId: v('fuenteId'), recursosDeConvenio: false,",
@@ -1368,6 +1454,35 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"fechaActaFinal\": \"{{anio}}-07-25\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3.1b Registrar el pago pactado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Pago 1', () => pm.expect(pm.response.json().numero).to.eql(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/contratos/{{contrato1}}/pagos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"valor\": 1000000,\n  \"fecha\": \"{{anio}}-07-15\"\n}"
             }
           }
         },

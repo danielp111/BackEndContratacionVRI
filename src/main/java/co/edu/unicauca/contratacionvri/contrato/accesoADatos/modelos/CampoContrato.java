@@ -36,7 +36,15 @@ public enum CampoContrato {
     NATURALEZA_GASTO("Naturaleza del gasto"),
     TIPO_ANTICIPO("Anticipo o pago anticipado"),
     VALOR_ANTICIPO("Valor del anticipo"),
-    FECHA_CERTIFICACION_PAGO("Fecha de certificación de pago");
+    FECHA_CERTIFICACION_PAGO("Fecha de certificación de pago"),
+    CDP("CDP"),
+    RP("Registro presupuestal"),
+    UNSPSC("Código UNSPSC"),
+    SUPERVISOR("Supervisor"),
+    INTERVENTOR("Interventor"),
+    MODIFICACIONES("Adiciones"),
+    PAGOS("Pagos"),
+    POLIZAS("Pólizas de seguros");
 
     private final String etiqueta;
 

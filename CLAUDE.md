@@ -86,24 +86,36 @@ Estados: `EN_TRAMITE` → `SUSCRITO` → `EN_EJECUCION` → `TERMINADO` → `LIQ
 - Un contrato de un año anterior que sigue vivo se reporta en SIRECI con prefijo `AN25-`, `AN24-`… delante del número.
 
 ### Campos calculados (no se guardan, se calculan en vistas o en el dominio)
+
+Se calculan en el código (`CalculadoraResumen`, sin base de datos, probada con fechas fijas) a partir de los totales de modificaciones y pagos. La vista SQL `v_contrato_resumen` para los reportes se creará en la fase 4 con las mismas fórmulas. Porcentajes, valor diario y días ejecutados con 2 decimales.
+
 - Valor inicial = valor sin IVA + IVA.
 - Valor final = valor inicial + adiciones en valor. Plazo total = plazo + días de adición.
 - Pagos acumulados = suma de los pagos.
-- Saldo = valor inicial + adiciones − pagos acumulados − anticipo.
+- Saldo = valor inicial + adiciones − pagos acumulados − anticipo (= valor final − pagos − anticipo). Nunca negativo: un pago, una adición reducida o borrada o un valor del contrato más bajo que lo dejen negativo dan 400.
 - Valor diario = valor final ÷ plazo total. Días ejecutados = pagos acumulados ÷ valor diario.
-- Avance físico = días ejecutados × 100 ÷ plazo total.
-- Avance presupuestal = (pagos acumulados + anticipo) × 100 ÷ valor final.
+- Avance físico real = días ejecutados × 100 ÷ plazo total.
+- Avance presupuestal real = (pagos acumulados + anticipo) × 100 ÷ valor final.
+- Avance físico programado = días transcurridos desde el inicio, contando el de inicio y hasta hoy, × 100 ÷ plazo total, con tope de 100; 0 sin fecha de inicio y 100 con fecha de terminación. El avance presupuestal programado es el mismo porcentaje (el Excel usaba la fórmula del real para los dos).
+- Tipo de adición (VALOR, TIEMPO, VALOR_TIEMPO o SIN_ADICION) = según las sumas de las modificaciones; "no se ha adicionado" no se registra como fila.
+- Fecha de terminación estimada = inicio + plazo total − 1, mientras no haya fecha de terminación. Semestre en que finaliza ("2026-2") = de la fecha de terminación o, si no hay, de la estimada.
 - Dependencia de afectación: es el nombre del rubro presupuestal (`rubro_presupuestal.nombre`), no una dependencia del catálogo. Nombre, cédula y cargo del ordenador: del periodo de ordenador del gasto (`ordenador_gasto` y su tercero). Datos del contratista y supervisor: del maestro de terceros. DV: algoritmo DIAN. Edad: desde la fecha de nacimiento.
 
 ### Obligatoriedad condicional (bloquean el guardado)
 - Recursos de contrato o convenio interadministrativo = SI exige NIT y DV de la entidad; NO los deja vacíos.
 - Persona natural no puede tener tipo de documento NIT. NIT exige número y DV; cédula o RUT exige número de cédula; cédula de extranjería exige su número. Igual para supervisor e interventor.
-- Tipo de seguimiento "Supervisor" exige supervisor; "Interventor" exige interventor; "Interventor y Supervisor" exige ambos.
+- Tipo de seguimiento "Supervisor" exige supervisor; "Interventor" exige interventor; "Interventor y Supervisor" exige ambos. Se aplica al suscribir (la lista de "faltan" incluye "supervisor" o "interventor"), al agregar un periodo (un rol que el tipo no admite da 400) y al cambiar el tipo del contrato (no puede dejar periodos que no cuadren).
 - Clase "30 OTROS" exige describir la otra clase; cualquier otra clase la deja vacía. Se decide con `ClaseContratoEntity.esOtros()` (código 30 en el ámbito CONTRATO), no comparando textos.
 - Anticipo "No pactados" exige valor 0; "Anticipo" o "Pago anticipado" exige valor.
 - Adición en valor exige valor; en tiempo exige días; en valor y tiempo exige ambos.
 - Fecha de terminación exige fecha de inicio; inicio exige suscripción; acta final exige terminación.
-- Si el número de pagos es N, los pagos 1 a N son obligatorios.
+- Si el número de pagos es N, los pagos 1 a N son obligatorios: el acta final (liquidación) exige al menos N pagos registrados. Más de N se permite con aviso.
+
+### Avisos (no bloquean; van en `advertencias`)
+- El contratista tiene otro contrato no anulado en el año: posible fraccionamiento.
+- La suma de los CDP con valor es menor que el valor final.
+- Las adiciones en valor superan el 50 % del valor inicial (límite de la Ley 80).
+- Se registra un pago más allá de los pactados.
 
 ### Límites
 - Objeto y observaciones: máximo 390 caracteres.
@@ -312,7 +324,7 @@ Naturaleza para el SIRECI (catálogo `NATURALEZA`): sale del tercero, sin guarda
 
 ### 3. Contrato
 
-El dominio de contratos se construye por fases: **1** `contrato`, `contrato_presupuesto` y `contrato_observacion` (hecha); **2** detalle (CDP, RP, UNSPSC, seguimiento, modificaciones, pagos, pólizas) y la vista `v_contrato_resumen`; **3** `contrato_sireci`, `publicacion_secop` y `documento_expediente`; **4** reporte SIRECI.
+El dominio de contratos se construye por fases: **1** `contrato`, `contrato_presupuesto` y `contrato_observacion` (hecha); **2** detalle (CDP, RP, UNSPSC, seguimiento, modificaciones, pagos, pólizas) y los campos calculados (hecha); **3** `contrato_sireci`, `publicacion_secop` y `documento_expediente`; **4** reporte SIRECI.
 
 **`contrato`**: centro del modelo (dominio `contrato`).
 
@@ -334,7 +346,7 @@ El dominio de contratos se construye por fases: **1** `contrato`, `contrato_pres
 | valor_sin_iva | DECIMAL(18,2) | ≥ 0 |
 | iva | DECIMAL(18,2) | ≥ 0 |
 | plazo_dias | INT | > 0 |
-| numero_pagos | INT | 0 a 999. Los pagos 1 a N serán obligatorios (fase 2) |
+| numero_pagos | INT | 0 a 999. El acta final exige al menos N pagos registrados |
 | fecha_suscripcion | DATE | Dentro del año del contrato. Exige el contrato completo |
 | fecha_inicio | DATE | Exige fecha de suscripción y no es anterior a ella |
 | fecha_terminacion | DATE | Exige fecha de inicio y no es anterior a ella |
@@ -415,13 +427,18 @@ Todas tienen `id BIGINT` PK y `contrato_id BIGINT` FK `contrato`.
 
 | Tabla | Campos propios | Reglas |
 |---|---|---|
-| `contrato_cdp` | numero_cdp VARCHAR(40), valor DECIMAL(18,2), fecha DATE | Número único por contrato |
-| `contrato_rp` | numero_rp VARCHAR(40), valor DECIMAL(18,2), fecha DATE | Número único por contrato |
-| `contrato_unspsc` | codigo_unspsc VARCHAR(10) | Código único por contrato |
-| `contrato_seguimiento` | rol VARCHAR(15) (SUPERVISOR, INTERVENTOR), tercero_id BIGINT FK `tercero`, desde DATE, hasta DATE | Debe cuadrar con el tipo de seguimiento; `hasta` nulo = vigente |
-| `modificacion` | tipo_adicion_id BIGINT FK `catalogo_item` (TIPO_ADICION), valor DECIMAL(18,2), dias INT, fecha DATE, documento VARCHAR(200), observacion VARCHAR(390) | En valor exige valor; en tiempo exige días; ambos exige los dos |
-| `pago` | numero SMALLINT, valor DECIMAL(18,2), fecha DATE, registrado_por BIGINT FK `usuario` | Número único por contrato, consecutivo desde 1; sin límite |
-| `poliza` | numero VARCHAR(40), aseguradora_id BIGINT FK `catalogo_item` (ASEGURADORA), vigencia_hasta DATE | |
+| `contrato_cdp` | numero_cdp VARCHAR(40), valor DECIMAL(18,2), fecha DATE | Número obligatorio, en mayúsculas y único por contrato. Valor (> 0) y fecha opcionales: los contratos migrados del Excel solo traen el número |
+| `contrato_rp` | numero_rp VARCHAR(40), valor DECIMAL(18,2), fecha DATE | Igual que el CDP. CDP y RP comparten la clase `DocumentoPresupuestalEntity` (`@MappedSuperclass`) |
+| `contrato_unspsc` | codigo_unspsc VARCHAR(10) | 8 dígitos (se quitan los espacios). Único por contrato |
+| `contrato_seguimiento` | rol VARCHAR(15) (SUPERVISOR, INTERVENTOR), tercero_id BIGINT FK `tercero`, desde DATE, hasta DATE | Debe cuadrar con el tipo de seguimiento; `hasta` nulo = vigente. Supervisor: persona natural; interventor: natural o jurídica. Dos periodos del mismo rol no se cruzan (409): para cambiar de supervisor se cierra el actual (`PATCH /cerrar`) y se agrega el nuevo. Con el contrato suscrito, `desde` no es anterior a la suscripción |
+| `modificacion` | tipo_adicion_id BIGINT FK `catalogo_item` (TIPO_ADICION), valor DECIMAL(18,2), dias INT, fecha DATE, documento VARCHAR(200), observacion VARCHAR(390) | Solo en contratos suscritos; fecha no anterior a la suscripción. VALOR exige valor y no lleva días; TIEMPO exige días y no lleva valor; VALOR_TIEMPO exige los dos; SIN_ADICION no se registra |
+| `pago` | numero SMALLINT, valor DECIMAL(18,2), fecha DATE, registrado_por BIGINT FK `usuario` | El número lo asigna el sistema, consecutivo desde 1 y único por contrato; sin límite. Solo con fecha de inicio y no antes de ella. Solo el **último** pago se corrige o se borra; con acta final, un pago pactado no se borra. `registrado_por` nulo hasta que exista el login |
+| `poliza` | numero VARCHAR(40), aseguradora_id BIGINT FK `catalogo_item` (ASEGURADORA), vigencia_hasta DATE | Número en mayúsculas y único por contrato |
+
+- Las filas se pueden borrar para corregir errores (CDP, RP, UNSPSC, pólizas, modificaciones y el último pago); la auditoría (fase 3) dejará la traza. Los periodos de seguimiento no se borran: se cierran.
+- Un contrato anulado no admite cambios en su detalle (400); se puede leer.
+- **Bloqueo**: pagos, modificaciones y los cambios del contrato (`PUT`, cierre) bloquean la fila del contrato (`ContratoRepositorio.bloquear`, `SELECT … FOR UPDATE` sobre una fila que existe). Así dos pagos simultáneos no reciben el mismo número ni dejan el saldo negativo. Probado con pagos simultáneos en H2 y en MySQL.
+- **CHECK de los enums**: Hibernate crea un CHECK con los valores de cada enum al crear la tabla y, con `ddl-auto=update`, no lo actualiza si el enum crece. Agregar un valor a un enum guardado exige actualizar o quitar su CHECK en las bases existentes. `db/migracion-manual/2026-11-27-contrato-detalle.sql` quita el de `contrato_observacion.campo` (`CampoContrato` ganó los campos del detalle); ya se aplicó a la base de desarrollo.
 
 ### 5. Expediente, reportes y auditoría
 
@@ -526,6 +543,7 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Clases de contrato SIRECI: `GET /api/clases-contrato?ambito=&activo=` (con `activo=true` para selectores; orden por ámbito y código), `GET/PUT /api/clases-contrato/{id}` (PUT solo cambia el nombre; un código o ámbito distinto en el cuerpo da 400), `POST /api/clases-contrato` y `PATCH /{id}/estado`.
 - Rubros presupuestales: `GET /api/rubros?texto=&activo=&pagina=&tamanio=` (`texto` = prefijo del código o contenido del nombre; con `activo=true` para selectores; orden numérico por código), `GET/PUT /api/rubros/{id}` (el código no cambia si hay contratos: 400; si choca con otro: 409), `POST /api/rubros` y `PATCH /{id}/estado`. Respuesta con `codigo`, `nombre`, `etiqueta` ("1052002 - Museo de Historia Natural") y `codigoEditable`.
 - Contratos: `POST /api/contratos`, `GET/PUT /api/contratos/{id}`, `PATCH /{id}/cierre`, `PATCH /{id}/anular` con `{"motivo": ...}`, `GET /api/contratos?numero=&anio=&estado=&tipoContratoId=&claseContratoId=&responsableId=&contratista=&texto=&pagina=&tamanio=` (`numero` completo, solo el consecutivo o solo la serie; `contratista` = prefijo del documento o parte del nombre; `texto` = parte del objeto; orden: año y consecutivo descendentes) y `GET /api/abogados/{abogadoId}/contratos?inicioDesde=&inicioHasta=&terminacionDesde=&terminacionHasta=&conObservaciones=&estado=&anio=&pagina=&tamanio=` (vive en el dominio contrato; 404 si el abogado no existe; un rango invertido da 400). Las filas traen `observacionesPendientes`.
+- Detalle del contrato (`ContratoDetalleRestController`, bajo `/api/contratos/{id}`): `/cdp` y `/rp` (GET, POST, PUT y DELETE `/{filaId}`), `/unspsc` (GET, POST, DELETE), `/polizas` (GET, POST, PUT, DELETE), `/seguimientos` (GET, POST, PUT `/{filaId}`, PATCH `/{filaId}/cerrar` con `{"hasta"}`), `/modificaciones` (GET, POST, PUT, DELETE), `/pagos` (GET, POST sin número, PUT y DELETE solo del último) y `GET /resumen` (solo los calculados). `GET /api/contratos/{id}` trae el bloque `resumen`; las filas de los listados traen `valorFinal`, `saldo`, `avanceFisicoReal` y `avancePresupuestalReal`. Borrar responde 204.
 - Observaciones: `GET /api/contratos/campos`, `POST /api/contratos/{id}/observaciones` con `{"campo", "texto"}`, `GET /api/contratos/{id}/observaciones?campo=&resuelta=` (la más reciente primero), `PATCH /{id}/observaciones/{obsId}/resolver` con `{"respuesta"}` opcional y `GET /{id}/observaciones/conteo` (`total`, `pendientes` y `porCampo` en el orden del formulario).
 - Ordenadores del gasto: `GET /api/ordenadores-gasto?vigenteEn=AAAA-MM-DD&texto=&activo=` (`vigenteEn` para los selectores del contrato: periodos activos que cubren esa fecha; `texto` = nombre, cédula o cargo), `GET/PUT /api/ordenadores-gasto/{id}`, `POST /api/ordenadores-gasto`, `PATCH /{id}/cerrar` con `{"fechaHasta": ...}` y `PATCH /{id}/estado`.
 - Catálogos: `GET /api/catalogos?activo=`, `GET/PUT /api/catalogos/{codigo}` (un código distinto en el cuerpo da 400), `POST /api/catalogos` y `PATCH /{codigo}/estado`. Ítems: `GET /api/catalogos/{codigo}/items?activo=true` (selectores), `GET/PUT /api/catalogos/{codigo}/items/{id}` (un ítem de otro catálogo da 404; un código distinto en el cuerpo da 400), `POST /api/catalogos/{codigo}/items` y `PATCH /{id}/estado`. Ya no existe `/api/catalogo-items`.

@@ -27,7 +27,7 @@ class ContratoBusquedaTest extends ContratoPruebaBase {
         p.put("objeto", "Apoyo al laboratorio de genética");
         p.put("fechaSuscripcion", fecha(2, 1));
         p.put("fechaInicio", fecha(2, 3));
-        ops1 = crearContratoId(p);
+        ops1 = crearSuscritoId(p);
 
         p = completo();
         p.put("contratistaId", pedro.getId());
@@ -35,7 +35,7 @@ class ContratoBusquedaTest extends ContratoPruebaBase {
         p.put("fechaSuscripcion", fecha(3, 1));
         p.put("fechaInicio", fecha(3, 5));
         p.put("fechaTerminacion", fecha(6, 30));
-        ops2 = crearContratoId(p);
+        ops2 = crearSuscritoId(p);
 
         p = minimo();
         p.put("responsableId", carlos.getId());

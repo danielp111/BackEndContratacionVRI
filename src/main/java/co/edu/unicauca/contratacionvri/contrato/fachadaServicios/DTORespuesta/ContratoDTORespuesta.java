@@ -69,6 +69,9 @@ public class ContratoDTORespuesta {
 
     private PresupuestoDTORespuesta presupuesto;
 
+    /** Calculados: valor final, saldo, avances... */
+    private ResumenContratoDTORespuesta resumen;
+
     private long observacionesPendientes;
     /** Avisos que no impiden guardar (p. ej. posible fraccionamiento). */
     private List<String> advertencias;

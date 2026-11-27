@@ -2,8 +2,11 @@ package co.edu.unicauca.contratacionvri.contrato;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -16,7 +19,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTOPeticion.ContratoCrearDTOPeticion;
+import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTOPeticion.PagoDTOPeticion;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.servicios.IContratoServicio;
+import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.servicios.PagoServicio;
 import co.edu.unicauca.contratacionvri.excepciones.excepcionesPropias.ReglaNegocioException;
 
 /**
@@ -29,6 +34,9 @@ class ContratoConcurrenciaTest extends ContratoPruebaBase {
 
     @Autowired
     private IContratoServicio servicio;
+
+    @Autowired
+    private PagoServicio pagoServicio;
 
     private ContratoCrearDTOPeticion peticion(Long tipoId, boolean invalida) {
         ContratoCrearDTOPeticion p = new ContratoCrearDTOPeticion();
@@ -82,6 +90,52 @@ class ContratoConcurrenciaTest extends ContratoPruebaBase {
         assertThat(consecutivos).hasSize(HILOS).doesNotHaveDuplicates()
                 .containsExactlyInAnyOrderElementsOf(IntStream.rangeClosed(109, 108 + HILOS).boxed().toList());
         assertThat(contratoRepositorio.count()).isEqualTo(HILOS);
+    }
+
+    /**
+     * Pagos simultáneos del mismo contrato: el bloqueo de la fila del contrato hace que cada uno vea el
+     * anterior, así no se repiten números y el pago que excede el saldo se rechaza.
+     */
+    @Test
+    void pagosSimultaneosRecibenNumerosDistintosYNoExcedenElSaldo() throws Exception {
+        Map<String, Object> p = completo();
+        p.put("valorSinIva", 1000000);
+        p.put("fechaSuscripcion", fecha(3, 10));
+        p.put("fechaInicio", fecha(3, 12));
+        long contratoId = crearSuscritoId(p);
+
+        // 25 pagos de 50.000 sobre un contrato de 1.000.000: caben 20.
+        int intentos = 25;
+        ExecutorService ejecutor = Executors.newFixedThreadPool(intentos);
+        CountDownLatch salida = new CountDownLatch(1);
+        try {
+            List<Future<Integer>> futuros = new ArrayList<>();
+            for (int i = 0; i < intentos; i++) {
+                futuros.add(ejecutor.submit(() -> {
+                    salida.await();
+                    PagoDTOPeticion pago = new PagoDTOPeticion();
+                    pago.setValor(BigDecimal.valueOf(50000));
+                    pago.setFecha(LocalDate.of(ANIO, 4, 1));
+                    try {
+                        return pagoServicio.crear(contratoId, pago).numero();
+                    } catch (ReglaNegocioException e) {
+                        return null;
+                    }
+                }));
+            }
+            salida.countDown();
+            List<Integer> numeros = new ArrayList<>();
+            for (Future<Integer> f : futuros) {
+                Integer n = f.get(60, TimeUnit.SECONDS);
+                if (n != null) {
+                    numeros.add(n);
+                }
+            }
+            assertThat(numeros).containsExactlyInAnyOrderElementsOf(IntStream.rangeClosed(1, 20).boxed().toList());
+            assertThat(pagoRepositorio.countByContratoId(contratoId)).isEqualTo(20);
+        } finally {
+            ejecutor.shutdownNow();
+        }
     }
 
     @Test

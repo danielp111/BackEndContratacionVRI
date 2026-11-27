@@ -18,8 +18,15 @@ import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoEnt
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoItemRepositorio;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoCdpRepositorio;
 import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoObservacionRepositorio;
 import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoRpRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoSeguimientoRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoUnspscRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ModificacionRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.PagoRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.PolizaRepositorio;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
 import co.edu.unicauca.contratacionvri.proyecto.accesoADatos.repositorios.ProyectoRepositorio;
@@ -58,6 +65,27 @@ public abstract class PruebaIntegracionBase {
 
     @Autowired
     protected ContratoObservacionRepositorio observacionRepositorio;
+
+    @Autowired
+    protected PagoRepositorio pagoRepositorio;
+
+    @Autowired
+    protected ModificacionRepositorio modificacionRepositorio;
+
+    @Autowired
+    protected ContratoSeguimientoRepositorio seguimientoRepositorio;
+
+    @Autowired
+    private ContratoCdpRepositorio cdpRepositorio;
+
+    @Autowired
+    private ContratoRpRepositorio rpRepositorio;
+
+    @Autowired
+    private ContratoUnspscRepositorio unspscRepositorio;
+
+    @Autowired
+    private PolizaRepositorio polizaRepositorio;
 
     @Autowired
     protected AbogadoRepositorio abogadoRepositorio;
@@ -107,6 +135,13 @@ public abstract class PruebaIntegracionBase {
         // cascada) apuntan a casi todos los maestros; consecutivo y tipo_contrato apuntan a la serie,
         // proyecto a persona_natural (director) y las personas jurídicas a las naturales (representante).
         observacionRepositorio.deleteAll();
+        pagoRepositorio.deleteAll();
+        modificacionRepositorio.deleteAll();
+        seguimientoRepositorio.deleteAll();
+        cdpRepositorio.deleteAll();
+        rpRepositorio.deleteAll();
+        unspscRepositorio.deleteAll();
+        polizaRepositorio.deleteAll();
         contratoRepositorio.deleteAll();
         rubroRepositorio.deleteAll();
         claseContratoRepositorio.deleteAll();

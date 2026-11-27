@@ -9,12 +9,14 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import co.edu.unicauca.contratacionvri.contrato.accesoADatos.modelos.ContratoEntity;
 import co.edu.unicauca.contratacionvri.contrato.accesoADatos.modelos.EstadoContrato;
+import jakarta.persistence.LockModeType;
 
 @Repository
 public interface ContratoRepositorio extends JpaRepository<ContratoEntity, Long>, JpaSpecificationExecutor<ContratoEntity> {
@@ -40,6 +42,15 @@ public interface ContratoRepositorio extends JpaRepository<ContratoEntity, Long>
                                                   @Param("anio") Integer anio,
                                                   @Param("idExcluir") Long idExcluir,
                                                   @Param("anulado") EstadoContrato anulado);
+
+    /**
+     * Bloquea la fila del contrato (SELECT ... FOR UPDATE) hasta que termine la transacción. Lo usan
+     * los cambios que tocan el dinero (pagos, modificaciones): dos pagos simultáneos no reciben el
+     * mismo número ni dejan el saldo negativo. La fila ya existe, así que no hay bloqueo de huecos.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ContratoEntity c WHERE c.id = :id")
+    Optional<ContratoEntity> bloquear(@Param("id") Long id);
 
     boolean existsByTipoContratoId(Long tipoContratoId);
 
