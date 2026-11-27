@@ -253,3 +253,94 @@ INSERT IGNORE INTO dependencia (id, nombre, activo, creado_en, actualizado_en) V
     (53, 'Recursos Humanos - Pensiones',                                    TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     (54, 'Unidad de Salud',                                                 TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     (55, 'Unilingua',                                                       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- =============================================================================================
+-- Tipos de identificación del SIRECI (hoja CONTROL, lista TIPO DE DOCUMENTO, filas 348 a 351).
+-- Sin ids fijos: la clave natural es (catalogo, codigo_sireci), así no choca con ítems que ya
+-- existan con otros ids. El código 5 ("no se diligencia información...") no es un tipo de documento:
+-- pertenece al reporte SIRECI y no se carga.
+-- =============================================================================================
+INSERT IGNORE INTO catalogo_item (catalogo, codigo_sireci, nombre, activo, creado_en, actualizado_en) VALUES
+    ('TIPO_IDENTIFICACION', '1', 'NIT',                              TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('TIPO_IDENTIFICACION', '2', 'RUT - REGISTRO ÚNICO TRIBUTARIO',  TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('TIPO_IDENTIFICACION', '3', 'CÉDULA DE CIUDADANÍA',             TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('TIPO_IDENTIFICACION', '4', 'CÉDULA DE EXTRANJERÍA',            TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- =============================================================================================
+-- Ordenadores del gasto. Fuente: hoja CONSOLIDADO ANUAL (columnas N, O y P: 127 contratos, 2
+-- combinaciones) y lista ORDENADOR DEL GASTO de la hoja CONTROL (A428:C436, 9 filas). En total
+-- 8 personas y 9 combinaciones de nombre, cédula y cargo.
+--   * Terceros: se crean como persona natural con cédula SOLO si no existe ya un tercero con esa
+--     cédula (clave natural: tipo + número, sin ids fijos). Nombres tal como vienen en el Excel
+--     (mayúsculas, sin tildes); nombres y apellidos separados tomando las dos últimas palabras como
+--     apellidos.
+--   * Periodos: solo para las 2 combinaciones con contratos en 2026, desde 2026-01-01, abiertos y
+--     POR CONFIRMAR con la VRI (el Excel no trae fechas). Las otras 7 combinaciones quedan sin
+--     periodo hasta que la VRI entregue sus fechas. es_delegado = FALSE por confirmar.
+--   * Cargo corregido: "VICERECTOR DE INVESTIGACIONES" (sic) → "Vicerrector de Investigaciones".
+-- =============================================================================================
+INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
+    SELECT 'NATURAL', c.id, '76314448', 'FRANCISCO JOSE PINO CORREA', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
+    SELECT t.id, 'FRANCISCO JOSE', 'PINO CORREA'
+    FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76314448' AND t.naturaleza = 'NATURAL';
+INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
+    SELECT 'NATURAL', c.id, '76311561', 'DEIBAR RENE HURTADO HERRERA', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
+    SELECT t.id, 'DEIBAR RENE', 'HURTADO HERRERA'
+    FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76311561' AND t.naturaleza = 'NATURAL';
+INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
+    SELECT 'NATURAL', c.id, '34570235', 'CIELO PEREZ SOLANO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
+    SELECT t.id, 'CIELO', 'PEREZ SOLANO'
+    FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '34570235' AND t.naturaleza = 'NATURAL';
+INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
+    SELECT 'NATURAL', c.id, '10535844', 'JOSE LUIS DIAGO FRANCO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
+    SELECT t.id, 'JOSE LUIS', 'DIAGO FRANCO'
+    FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '10535844' AND t.naturaleza = 'NATURAL';
+INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
+    SELECT 'NATURAL', c.id, '34552816', 'JANETH NOGUERA RAMOS', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
+    SELECT t.id, 'JANETH', 'NOGUERA RAMOS'
+    FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '34552816' AND t.naturaleza = 'NATURAL';
+INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
+    SELECT 'NATURAL', c.id, '7551810', 'HECTOR SAMUEL VILLADA CASTILLO', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
+    SELECT t.id, 'HECTOR SAMUEL', 'VILLADA CASTILLO'
+    FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '7551810' AND t.naturaleza = 'NATURAL';
+INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
+    SELECT 'NATURAL', c.id, '76321704', 'ALEJANDRO TOLEDO TOVAR', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
+    SELECT t.id, 'ALEJANDRO', 'TOLEDO TOVAR'
+    FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76321704' AND t.naturaleza = 'NATURAL';
+INSERT IGNORE INTO tercero (naturaleza, tipo_identificacion_id, numero_documento, nombre_completo, activo, creado_en, actualizado_en)
+    SELECT 'NATURAL', c.id, '15505403', 'JUAN CARLOS CASAS ZAPATA', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM catalogo_item c WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3';
+INSERT IGNORE INTO persona_natural (tercero_id, nombres, apellidos)
+    SELECT t.id, 'JUAN CARLOS', 'CASAS ZAPATA'
+    FROM tercero t JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '15505403' AND t.naturaleza = 'NATURAL';
+-- Periodos (uk_ordenador_gasto_periodo: tercero + cargo + fecha_desde hace idempotente la carga).
+INSERT IGNORE INTO ordenador_gasto (tercero_id, cargo, es_delegado, acto_delegacion, fecha_desde, fecha_hasta, activo, creado_en, actualizado_en)
+    SELECT pn.tercero_id, 'Vicerrector de Investigaciones', FALSE, NULL, DATE '2026-01-01', NULL, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM persona_natural pn JOIN tercero t ON t.id = pn.tercero_id JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76314448';
+INSERT IGNORE INTO ordenador_gasto (tercero_id, cargo, es_delegado, acto_delegacion, fecha_desde, fecha_hasta, activo, creado_en, actualizado_en)
+    SELECT pn.tercero_id, 'Rector', FALSE, NULL, DATE '2026-01-01', NULL, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM persona_natural pn JOIN tercero t ON t.id = pn.tercero_id JOIN catalogo_item c ON c.id = t.tipo_identificacion_id
+    WHERE c.catalogo = 'TIPO_IDENTIFICACION' AND c.codigo_sireci = '3' AND t.numero_documento = '76311561';

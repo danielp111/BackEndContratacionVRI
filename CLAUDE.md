@@ -92,7 +92,7 @@ Estados (guardarlos explícitamente; hoy se deducen de las fechas):
 - Valor diario = valor final ÷ plazo total. Días ejecutados = pagos acumulados ÷ valor diario.
 - Avance físico = días ejecutados × 100 ÷ plazo total.
 - Avance presupuestal = (pagos acumulados + anticipo) × 100 ÷ valor final.
-- Dependencia de afectación: es el nombre del rubro presupuestal (`rubro_presupuestal.nombre`), no una dependencia del catálogo. Cédula y cargo del ordenador: del ordenador. Datos del contratista y supervisor: del maestro de terceros. DV: algoritmo DIAN. Edad: desde la fecha de nacimiento.
+- Dependencia de afectación: es el nombre del rubro presupuestal (`rubro_presupuestal.nombre`), no una dependencia del catálogo. Nombre, cédula y cargo del ordenador: del periodo de ordenador del gasto (`ordenador_gasto` y su tercero). Datos del contratista y supervisor: del maestro de terceros. DV: algoritmo DIAN. Edad: desde la fecha de nacimiento.
 
 ### Obligatoriedad condicional (bloquean el guardado)
 - Recursos de contrato o convenio interadministrativo = SI exige NIT y DV de la entidad; NO los deja vacíos.
@@ -186,6 +186,8 @@ Convenciones del modelo:
 | nombre | VARCHAR(150) | Se muestra como "código nombre" |
 | activo | BOOLEAN | |
 
+Carga inicial (`data.sql`): los tipos de identificación del SIRECI (CONTROL, lista TIPO DE DOCUMENTO): 1 NIT, 2 RUT - REGISTRO ÚNICO TRIBUTARIO, 3 CÉDULA DE CIUDADANÍA, 4 CÉDULA DE EXTRANJERÍA, sin ids fijos (clave natural catálogo + código). El 5 ("no se diligencia información...") no se carga: pertenece al reporte SIRECI.
+
 **`tercero`**: contratistas, supervisores, interventores, ordenadores, directores de proyecto y entidades financiadoras. Herencia JPA `JOINED`: los datos comunes en `tercero` y los propios en `persona_natural` o `persona_juridica` (PK = FK `tercero_id`).
 
 | Campo | Tipo | Llave / regla |
@@ -210,15 +212,25 @@ El NIT se reconoce por el código SIRECI del tipo de identificación, configurad
 
 El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 
-**`ordenador_gasto`**
+**`ordenador_gasto`**: periodo en que una persona natural firma contratos como ordenador del gasto (o su delegado) con un cargo (dominio `ordenador`). No repite datos personales: nombre y cédula vienen del tercero.
 
 | Campo | Tipo | Llave / regla |
 |---|---|---|
 | id | BIGINT | PK |
-| tercero_id | BIGINT | FK `tercero` |
-| cargo | VARCHAR(120) | Ej. VICERRECTOR DE INVESTIGACIONES, RECTOR DELEGATARIO |
-| vigente_desde | DATE | |
-| vigente_hasta | DATE | Nulo si sigue vigente |
+| tercero_id | BIGINT | FK a `persona_natural` (la base impide que sea jurídica). Debe existir y estar activo al asignarlo o cambiarlo |
+| cargo | VARCHAR(120) | Obligatorio, tal como se escribe (ej. "Vicerrector de Investigaciones", "Rector") |
+| es_delegado | BOOLEAN | Verdadero si firma por delegación |
+| acto_delegacion | VARCHAR(200) | Número y fecha de la resolución. Obligatorio si es_delegado; vacío si no |
+| fecha_desde | DATE | Obligatoria |
+| fecha_hasta | DATE | Opcional (nula = periodo abierto). Si viene, ≥ fecha_desde |
+| activo | BOOLEAN | |
+
+- Único por (tercero_id, cargo, fecha_desde) (`uk_ordenador_gasto_periodo`), que además hace idempotente la carga inicial.
+- Un mismo tercero no puede tener dos periodos **activos** con el mismo cargo que se crucen (409); el cargo se compara sin mayúsculas ni tildes. Un periodo inactivo no bloquea, y reactivarlo vuelve a validar el cruce.
+- No hay borrado: se inactiva o se cierra el periodo (`PATCH /{id}/cerrar`). Si ya hay contratos (`UsoOrdenadorChecker`; su implementación provisional responde "sin contratos" hasta que exista la tabla contrato), el tercero, el cargo y la fecha desde no se pueden cambiar; cerrar sí.
+- El contrato guardará `ordenador_gasto_id` (el periodo, no la persona) y lo validará con `IOrdenadorGastoServicio.obtenerOrdenadorValido(id, actual, fechaSuscripcion)`: activo si cambia, y la fecha de suscripción siempre dentro del periodo. Así se corrige un error del Excel: allí el cargo se busca con `BUSCARV` por el nombre y, si una persona tiene dos cargos, devuelve siempre el primero.
+- La API devuelve `nombre`, `cedula` y `tipoIdentificacion` del tercero junto con el `cargo`, listos para el SIRECI ("nombre, cédula y cargo del ordenador del gasto o su delegado").
+- Carga inicial (`data.sql`): valores distintos de la hoja CONSOLIDADO ANUAL (columnas N, O y P; 127 contratos, 2 combinaciones) y de la lista ORDENADOR DEL GASTO de CONTROL (A428:C436): 8 personas y 9 combinaciones de nombre, cédula y cargo. Las 8 personas se crean como persona natural con cédula si no existe ya un tercero con esa cédula (clave natural, sin ids fijos); nombres tal como vienen (mayúsculas, sin tildes), separados tomando las dos últimas palabras como apellidos. Solo las 2 combinaciones con contratos en 2026 tienen periodo: Francisco José Pino Correa, Vicerrector de Investigaciones, y Deibar René Hurtado Herrera, Rector, desde 2026-01-01, abiertos, no delegados, **por confirmar**. Las otras 7 combinaciones quedan sin periodo hasta que la VRI entregue sus fechas. Cargo corregido: "VICERECTOR" (sic) → "Vicerrector".
 
 **`proyecto`**
 
@@ -307,7 +319,7 @@ El catálogo `NATURALEZA` de `catalogo_item` ya no se usa para terceros.
 | otra_clase | VARCHAR(150) | Obligatoria solo si la clase es 30 OTROS (`esOtros()`); vacía en cualquier otra |
 | objeto | VARCHAR(390) | Obligatorio |
 | contratista_id | BIGINT | FK `tercero` |
-| ordenador_id | BIGINT | FK `ordenador_gasto` |
+| ordenador_gasto_id | BIGINT | FK `ordenador_gasto` (el periodo). La fecha de suscripción debe caer dentro del periodo |
 | tipo_seguimiento_id | BIGINT | FK `catalogo_item` (TIPO_SEGUIMIENTO) |
 | valor_sin_iva | DECIMAL(18,2) | ≥ 0 |
 | iva | DECIMAL(18,2) | ≥ 0 |
@@ -442,10 +454,11 @@ La carga inicial desde el Excel debe limpiar: CDP, RP y UNSPSC con varios valore
 - Confirmar que el SIRECI es trimestral (el diccionario dice mensual).
 - Nombre completo de los rubros 9011141 y 9011044001: en el Excel ambos dicen "Servicios prestados a Empresas y", que parece truncado.
 - Dependencias que podrían ser la misma (se cargaron todas activas): "Facultad de Ciencias Agrarias" y "Facultad de Ciencias Agropecuarias"; "de Admisiones" y "Admisiones y Registro"; "de Salud Ocupacional" y "de Seguridad y Salud en el Trabajo"; "de Gestión del Talento Humano" y "Recursos Humanos - Pensiones". Si alguno es un nombre anterior, conviene inactivarlo (sirve para migrar contratos viejos sin ofrecerse en selectores).
+- Ordenadores del gasto: fechas reales de cada periodo (el Excel no las trae; los 2 de 2026 se cargaron desde 2026-01-01 por confirmar, y los otros 7 sin periodo); si el Vicerrector de Investigaciones firma por delegación del Rector y con qué resolución; de qué vicerrectoría eran encargados los dos "Vicerrector (E)" (Alejandro Toledo Tovar y Juan Carlos Casas Zapata); y quién firmó el contrato 6.1-17.13/093, que en el consolidado no tiene ordenador.
 
 ## Estructura del código
 
-Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos), `clasecontrato` (clases SIRECI) y `rubro` (rubros presupuestales). Cada dominio tiene tres capas:
+Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `usuario`, `catalogo` (tabla `catalogo_item`), `dependencia`, `tercero`, `proyecto`, `tipocontrato` (series documentales, tipos de contrato y consecutivos), `clasecontrato` (clases SIRECI), `rubro` (rubros presupuestales) y `ordenador` (ordenadores del gasto). Cada dominio tiene tres capas:
 
 ```
 <dominio>/
@@ -471,6 +484,7 @@ Paquete raíz `co.edu.unicauca.contratacionvri`. Dominios actuales: `abogado`, `
 - Tipos de contrato (dominio `tipocontrato`): `GET/POST /api/series-documentales`, `GET/PUT /api/series-documentales/{id}`, `PATCH /{id}/estado`, `GET /api/series-documentales/{id}/consecutivos/{anio}` (último número y siguiente; 0 si no hay números, no 404); `GET/POST /api/tipos-contrato?activo=&serieId=`, `GET/PUT /api/tipos-contrato/{id}`, `PATCH /{id}/estado` y `GET /api/tipos-contrato/activos` para selectores (tipo activo con serie activa). `generarNumero` no tiene endpoint: lo usa el dominio de contratos.
 - Clases de contrato SIRECI: `GET /api/clases-contrato?ambito=&activo=` (con `activo=true` para selectores; orden por ámbito y código), `GET/PUT /api/clases-contrato/{id}` (PUT solo cambia el nombre; un código o ámbito distinto en el cuerpo da 400), `POST /api/clases-contrato` y `PATCH /{id}/estado`.
 - Rubros presupuestales: `GET /api/rubros?texto=&activo=&pagina=&tamanio=` (`texto` = prefijo del código o contenido del nombre; con `activo=true` para selectores; orden numérico por código), `GET/PUT /api/rubros/{id}` (el código no cambia si hay contratos: 400; si choca con otro: 409), `POST /api/rubros` y `PATCH /{id}/estado`. Respuesta con `codigo`, `nombre`, `etiqueta` ("1052002 - Museo de Historia Natural") y `codigoEditable`.
+- Ordenadores del gasto: `GET /api/ordenadores-gasto?vigenteEn=AAAA-MM-DD&texto=&activo=` (`vigenteEn` para los selectores del contrato: periodos activos que cubren esa fecha; `texto` = nombre, cédula o cargo), `GET/PUT /api/ordenadores-gasto/{id}`, `POST /api/ordenadores-gasto`, `PATCH /{id}/cerrar` con `{"fechaHasta": ...}` y `PATCH /{id}/estado`.
 - Errores HTTP: 400 (validación o regla de negocio), 404 (no existe), 409 (duplicado), 415 (cuerpo que no es `application/json`).
 - No hay borrado físico de maestros: se usa `PATCH /{id}/estado?activo=`.
 - MySQL local: `docker compose up -d` (MySQL 8.4 en el puerto 3306, base `contratacion_vri`). Las pruebas usan H2 en memoria y no necesitan Docker.

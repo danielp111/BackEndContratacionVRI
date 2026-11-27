@@ -1,0 +1,681 @@
+{
+  "info": {
+    "name": "Contratación VRI - Ordenadores del gasto",
+    "description": "Pruebas del catálogo de ordenadores del gasto (periodos en que una persona natural firma contratos con un cargo). Ejecutar COMPLETA y EN ORDEN con el Collection Runner o con newman: cada petición usa los datos que guardó la anterior.\n\nLa carpeta 00 verifica la carga inicial (data.sql): los 2 periodos de 2026 con nombre, cédula y cargo listos para el SIRECI. Luego crea una persona natural y una jurídica de prueba con un sufijo único por ejecución. Los periodos de prueba usan fechas de 2029 y 2030 para no cruzarse con los reales.\n\nCada ejecución crea 2 terceros y 2 periodos de prueba; al final deja los periodos INACTIVOS, para que no aparezcan en los selectores.\n\nLa regla \"con contratos no cambian tercero, cargo ni fecha desde\" no se puede probar por API mientras no exista la tabla contrato; está cubierta por las pruebas en Java.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "sufijo", "value": "" },
+    { "key": "tipoCedulaId", "value": "" },
+    { "key": "terceroId", "value": "" },
+    { "key": "empresaId", "value": "" },
+    { "key": "ordenadorId", "value": "" },
+    { "key": "ordenador2Id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación",
+      "item": [
+        {
+          "name": "Verificar los ordenadores vigentes de la carga inicial",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Sufijo único por ejecución para la cédula, la razón social y el cargo de prueba.",
+                  "pm.collectionVariables.set('sufijo', Date.now().toString().slice(-8));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json();",
+                  "const pino = lista.find(o => o.cedula === '76314448' && o.cargo === 'Vicerrector de Investigaciones');",
+                  "pm.test('Vicerrector de Investigaciones vigente, con el cargo corregido (no VICERECTOR)', () => pm.expect(pino).to.exist);",
+                  "pm.test('Datos listos para el SIRECI: nombre, cédula y cargo', () => {",
+                  "    pm.expect(pino.nombre).to.eql('FRANCISCO JOSE PINO CORREA');",
+                  "    pm.expect(pino.tipoIdentificacion).to.eql('3 CÉDULA DE CIUDADANÍA');",
+                  "    pm.expect(pino.etiqueta).to.eql('FRANCISCO JOSE PINO CORREA - Vicerrector de Investigaciones');",
+                  "});",
+                  "pm.test('Rector vigente', () => pm.expect(lista.some(o => o.cedula === '76311561' && o.cargo === 'Rector')).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto?vigenteEn=2026-03-15",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto"],
+              "query": [{ "key": "vigenteEn", "value": "2026-03-15" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener el tipo CÉDULA DE CIUDADANÍA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const cedula = pm.response.json().find(i => i.codigoSireci === '3');",
+                  "pm.test('La carga inicial trae 3 CÉDULA DE CIUDADANÍA', () => pm.expect(cedula).to.exist);",
+                  "pm.collectionVariables.set('tipoCedulaId', cedula.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalogo-items?catalogo=TIPO_IDENTIFICACION&activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["catalogo-items"],
+              "query": [
+                { "key": "catalogo", "value": "TIPO_IDENTIFICACION" },
+                { "key": "activo", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear la persona natural del ordenador de prueba",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('terceroId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"5{{sufijo}}\",\n  \"nombres\": \"Ana María\",\n  \"apellidos\": \"Ordenadora O{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/terceros/naturales"
+          }
+        },
+        {
+          "name": "Crear una persona jurídica (no puede ser ordenadora)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('empresaId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tipoIdentificacionId\": {{tipoCedulaId}},\n  \"numeroDocumento\": \"6{{sufijo}}\",\n  \"razonSocial\": \"Empresa O{{sufijo}}\"\n}" },
+            "url": "{{baseUrl}}/terceros/juridicas"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Crear",
+      "item": [
+        {
+          "name": "1.1 Crear periodo (devuelve los datos del tercero)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created con Location', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.response.to.have.header('Location');",
+                  "});",
+                  "const o = pm.response.json();",
+                  "const sufijo = pm.collectionVariables.get('sufijo');",
+                  "pm.test('Nombre, cédula y tipo de documento tomados del tercero', () => {",
+                  "    pm.expect(o.terceroId).to.eql(Number(pm.collectionVariables.get('terceroId')));",
+                  "    pm.expect(o.nombre).to.eql('Ana María Ordenadora O' + sufijo);",
+                  "    pm.expect(o.cedula).to.eql('5' + sufijo);",
+                  "    pm.expect(o.tipoIdentificacion).to.eql('3 CÉDULA DE CIUDADANÍA');",
+                  "});",
+                  "pm.test('Cargo limpio, no delegado, periodo abierto', () => {",
+                  "    pm.expect(o.cargo).to.eql('Vicerrectora de Prueba O' + sufijo);",
+                  "    pm.expect(o.esDelegado).to.be.false;",
+                  "    pm.expect(o.fechaDesde).to.eql('2030-01-01');",
+                  "    pm.expect(o.fechaHasta).to.be.null;",
+                  "    pm.expect(o.activo).to.be.true;",
+                  "});",
+                  "pm.test('Aún no vigente hoy (empieza en 2030)', () => pm.expect(o.vigente).to.be.false);",
+                  "pm.collectionVariables.set('ordenadorId', o.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": {{terceroId}},\n  \"cargo\": \"  Vicerrectora   de Prueba O{{sufijo}} \",\n  \"fechaDesde\": \"2030-01-01\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto"
+          }
+        },
+        {
+          "name": "1.2 Rechazar periodo que se cruza con el mismo cargo (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('Explica el cruce', () => pm.expect(pm.response.json().mensaje).to.include('ya tiene un periodo activo como'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": {{terceroId}},\n  \"cargo\": \"VICERRECTORA DE PRUEBA O{{sufijo}}\",\n  \"fechaDesde\": \"2030-06-01\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto"
+          }
+        },
+        {
+          "name": "1.3 Un periodo anterior que no se cruza sí se permite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Periodo cerrado de 2029', () => {",
+                  "    pm.expect(pm.response.json().fechaDesde).to.eql('2029-01-01');",
+                  "    pm.expect(pm.response.json().fechaHasta).to.eql('2029-12-31');",
+                  "});",
+                  "pm.collectionVariables.set('ordenador2Id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": {{terceroId}},\n  \"cargo\": \"Vicerrectora de Prueba O{{sufijo}}\",\n  \"fechaDesde\": \"2029-01-01\",\n  \"fechaHasta\": \"2029-12-31\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto"
+          }
+        },
+        {
+          "name": "1.4 Rechazar fecha hasta anterior a fecha desde (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica la regla', () => pm.expect(pm.response.json().mensaje).to.eql('La fecha hasta (2027-12-31) no puede ser anterior a la fecha desde (2028-01-01)'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": {{terceroId}},\n  \"cargo\": \"Otro cargo O{{sufijo}}\",\n  \"fechaDesde\": \"2028-01-01\",\n  \"fechaHasta\": \"2027-12-31\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto"
+          }
+        },
+        {
+          "name": "1.5 Rechazar delegado sin acto de delegación (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Pide el acto de delegación', () => pm.expect(pm.response.json().mensaje).to.include('el acto de delegación'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": {{terceroId}},\n  \"cargo\": \"Rectora Delegataria O{{sufijo}}\",\n  \"esDelegado\": true,\n  \"fechaDesde\": \"2028-01-01\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto"
+          }
+        },
+        {
+          "name": "1.6 Rechazar un tercero que es persona jurídica (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Exige persona natural', () => pm.expect(pm.response.json().mensaje).to.include('debe ser una persona natural'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": {{empresaId}},\n  \"cargo\": \"Rector\",\n  \"fechaDesde\": \"2028-01-01\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto"
+          }
+        },
+        {
+          "name": "1.7 Rechazar campos obligatorios vacíos (400 con detalle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "const e = pm.response.json();",
+                  "pm.test('Detalla tercero, cargo y fecha desde', () => {",
+                  "    pm.expect(e.errores).to.have.property('terceroId');",
+                  "    pm.expect(e.errores.cargo).to.eql('El cargo es obligatorio');",
+                  "    pm.expect(e.errores.fechaDesde).to.eql('La fecha desde es obligatoria');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": null,\n  \"cargo\": \"\",\n  \"fechaDesde\": null\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Listar",
+      "item": [
+        {
+          "name": "2.1 Vigentes el 1 de enero de 2030 (borde del periodo abierto)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo el periodo que empieza ese día', () => pm.expect(pm.response.json().map(o => o.id)).to.eql([Number(pm.collectionVariables.get('ordenadorId'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto?vigenteEn=2030-01-01&texto=o{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto"],
+              "query": [
+                { "key": "vigenteEn", "value": "2030-01-01" },
+                { "key": "texto", "value": "o{{sufijo}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.2 Vigentes el 31 de diciembre de 2029 (borde del periodo cerrado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo el periodo de 2029', () => pm.expect(pm.response.json().map(o => o.id)).to.eql([Number(pm.collectionVariables.get('ordenador2Id'))]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto?vigenteEn=2029-12-31&texto=o{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto"],
+              "query": [
+                { "key": "vigenteEn", "value": "2029-12-31" },
+                { "key": "texto", "value": "o{{sufijo}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Buscar por prefijo de la cédula",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Los 2 periodos de la persona de prueba', () => pm.expect(pm.response.json().length).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto?texto=5{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto"],
+              "query": [{ "key": "texto", "value": "5{{sufijo}}" }]
+            }
+          }
+        },
+        {
+          "name": "2.4 Rechazar una fecha inválida (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código GC-0006', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0006'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto?vigenteEn=2026-13-01",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto"],
+              "query": [{ "key": "vigenteEn", "value": "2026-13-01" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Actualizar y cerrar",
+      "item": [
+        {
+          "name": "3.1 Marcar como delegado con su acto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "const o = pm.response.json();",
+                  "pm.test('Delegado, con el acto limpio', () => {",
+                  "    pm.expect(o.esDelegado).to.be.true;",
+                  "    pm.expect(o.actoDelegacion).to.eql('Resolución 0123 del 2 de enero de 2030');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": {{terceroId}},\n  \"cargo\": \"Vicerrectora de Prueba O{{sufijo}}\",\n  \"esDelegado\": true,\n  \"actoDelegacion\": \"  Resolución   0123 del 2 de enero de 2030 \",\n  \"fechaDesde\": \"2030-01-01\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto/{{ordenadorId}}"
+          }
+        },
+        {
+          "name": "3.2 Cerrar el periodo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda con fecha hasta', () => pm.expect(pm.response.json().fechaHasta).to.eql('2030-12-31'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"fechaHasta\": \"2030-12-31\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto/{{ordenadorId}}/cerrar"
+          }
+        },
+        {
+          "name": "3.3 Rechazar cerrar antes de la fecha desde (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica la regla', () => pm.expect(pm.response.json().mensaje).to.include('no puede ser anterior a la fecha desde'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"fechaHasta\": \"2029-12-31\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto/{{ordenadorId}}/cerrar"
+          }
+        },
+        {
+          "name": "3.4 Actualizar periodo inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código GC-0003', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0003'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"terceroId\": {{terceroId}},\n  \"cargo\": \"X\",\n  \"fechaDesde\": \"2030-01-01\"\n}" },
+            "url": "{{baseUrl}}/ordenadores-gasto/999999999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Estado",
+      "item": [
+        {
+          "name": "4.1 Inactivar el periodo de 2029",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto/{{ordenador2Id}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto", "{{ordenador2Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "4.2 Un periodo inactivo no se ofrece aunque cubra la fecha",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Ninguno vigente el 1 de junio de 2029', () => pm.expect(pm.response.json().length).to.eql(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto?vigenteEn=2029-06-01&texto=o{{sufijo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto"],
+              "query": [
+                { "key": "vigenteEn", "value": "2029-06-01" },
+                { "key": "texto", "value": "o{{sufijo}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Reactivar el periodo de 2029",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a estar activo', () => pm.expect(pm.response.json().activo).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto/{{ordenador2Id}}/estado?activo=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto", "{{ordenador2Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "4.4 Rechazar cuerpo que no es JSON (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 415 Unsupported Media Type', () => pm.response.to.have.status(415));",
+                  "pm.test('Código GC-0010', () => pm.expect(pm.response.json().codigoError).to.eql('GC-0010'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "text/plain" }],
+            "body": { "mode": "raw", "raw": "Rector" },
+            "url": "{{baseUrl}}/ordenadores-gasto"
+          }
+        }
+      ]
+    },
+    {
+      "name": "99 Limpieza",
+      "item": [
+        {
+          "name": "Inactivar el periodo de 2030",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo (no aparece en selectores)', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto/{{ordenadorId}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto", "{{ordenadorId}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        },
+        {
+          "name": "Inactivar el periodo de 2029",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Queda inactivo (no aparece en selectores)', () => pm.expect(pm.response.json().activo).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ordenadores-gasto/{{ordenador2Id}}/estado?activo=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["ordenadores-gasto", "{{ordenador2Id}}", "estado"],
+              "query": [{ "key": "activo", "value": "false" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

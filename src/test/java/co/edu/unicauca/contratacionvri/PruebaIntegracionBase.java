@@ -20,6 +20,7 @@ import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.Catalo
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
 import co.edu.unicauca.contratacionvri.proyecto.accesoADatos.repositorios.ProyectoRepositorio;
+import co.edu.unicauca.contratacionvri.ordenador.accesoADatos.repositorios.OrdenadorGastoRepositorio;
 import co.edu.unicauca.contratacionvri.rubro.accesoADatos.modelos.RubroEntity;
 import co.edu.unicauca.contratacionvri.rubro.accesoADatos.repositorios.RubroRepositorio;
 import co.edu.unicauca.contratacionvri.tercero.accesoADatos.modelos.PersonaJuridicaEntity;
@@ -68,6 +69,9 @@ public abstract class PruebaIntegracionBase {
     protected ProyectoRepositorio proyectoRepositorio;
 
     @Autowired
+    protected OrdenadorGastoRepositorio ordenadorGastoRepositorio;
+
+    @Autowired
     protected RubroRepositorio rubroRepositorio;
 
     @Autowired
@@ -94,6 +98,7 @@ public abstract class PruebaIntegracionBase {
         consecutivoRepositorio.deleteAll();
         tipoContratoRepositorio.deleteAll();
         serieRepositorio.deleteAll();
+        ordenadorGastoRepositorio.deleteAll();
         proyectoRepositorio.deleteAll();
         terceroRepositorio.deleteAll(terceroRepositorio.findAll().stream()
                 .filter(PersonaJuridicaEntity.class::isInstance).toList());
