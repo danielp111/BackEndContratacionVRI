@@ -18,6 +18,8 @@ import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoEnt
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.modelos.CatalogoItemEntity;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoItemRepositorio;
 import co.edu.unicauca.contratacionvri.catalogo.accesoADatos.repositorios.CatalogoRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoObservacionRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoRepositorio;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.modelos.DependenciaEntity;
 import co.edu.unicauca.contratacionvri.dependencia.accesoADatos.repositorios.DependenciaRepositorio;
 import co.edu.unicauca.contratacionvri.proyecto.accesoADatos.repositorios.ProyectoRepositorio;
@@ -50,6 +52,12 @@ public abstract class PruebaIntegracionBase {
 
     @Autowired
     protected ObjectMapper json;
+
+    @Autowired
+    protected ContratoRepositorio contratoRepositorio;
+
+    @Autowired
+    protected ContratoObservacionRepositorio observacionRepositorio;
 
     @Autowired
     protected AbogadoRepositorio abogadoRepositorio;
@@ -95,8 +103,11 @@ public abstract class PruebaIntegracionBase {
 
     @BeforeEach
     void limpiarBase() {
-        // Primero las tablas que referencian a las demás: consecutivo y tipo_contrato apuntan a la serie,
+        // Primero las tablas que referencian a las demás: los contratos (su presupuesto se borra en
+        // cascada) apuntan a casi todos los maestros; consecutivo y tipo_contrato apuntan a la serie,
         // proyecto a persona_natural (director) y las personas jurídicas a las naturales (representante).
+        observacionRepositorio.deleteAll();
+        contratoRepositorio.deleteAll();
         rubroRepositorio.deleteAll();
         claseContratoRepositorio.deleteAll();
         consecutivoRepositorio.deleteAll();

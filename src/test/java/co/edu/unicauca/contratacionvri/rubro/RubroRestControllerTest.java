@@ -31,7 +31,7 @@ class RubroRestControllerTest extends PruebaIntegracionBase {
 
     private static final String URL = "/api/rubros";
 
-    /** Espía sobre el checker provisional: por defecto "sin contratos"; en la prueba de la regla, "con contratos". */
+    /** Espía sobre el checker real: por defecto "sin contratos" (la prueba no crea contratos); en la prueba de la regla, "con contratos". */
     @MockitoSpyBean
     private UsoRubroChecker usoChecker;
 

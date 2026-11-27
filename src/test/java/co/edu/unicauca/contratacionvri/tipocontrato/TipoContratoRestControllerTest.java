@@ -28,7 +28,7 @@ class TipoContratoRestControllerTest extends PruebaIntegracionBase {
     private static final String URL = "/api/tipos-contrato";
 
     /**
-     * Espía sobre el checker provisional: por defecto responde lo real ("sin contratos" para tipos);
+     * Espía sobre el checker real: por defecto responde lo que hay en la base ("sin contratos" para tipos);
      * en las pruebas de la regla se le hace responder que el tipo ya tiene contratos.
      */
     @MockitoSpyBean
