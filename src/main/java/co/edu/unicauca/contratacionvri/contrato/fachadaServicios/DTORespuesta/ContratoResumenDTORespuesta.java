@@ -30,5 +30,9 @@ public class ContratoResumenDTORespuesta {
     private LocalDate fechaSuscripcion;
     private LocalDate fechaInicio;
     private LocalDate fechaTerminacion;
+    private BigDecimal valorFinal;
+    private BigDecimal saldo;
+    private BigDecimal avanceFisicoReal;
+    private BigDecimal avancePresupuestalReal;
     private long observacionesPendientes;
 }

@@ -35,6 +35,7 @@ import co.edu.unicauca.contratacionvri.contrato.accesoADatos.modelos.EstadoContr
 import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoEspecificaciones;
 import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoObservacionRepositorio;
 import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.ContratoRepositorio;
+import co.edu.unicauca.contratacionvri.contrato.accesoADatos.repositorios.PagoRepositorio;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTOPeticion.ContratoActualizarDTOPeticion;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTOPeticion.ContratoCierreDTOPeticion;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTOPeticion.ContratoCrearDTOPeticion;
@@ -44,6 +45,7 @@ import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.Ca
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ContratoDTORespuesta;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ContratoResumenDTORespuesta;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.PresupuestoDTORespuesta;
+import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ResumenContratoDTORespuesta;
 import co.edu.unicauca.contratacionvri.dependencia.fachadaServicios.servicios.IDependenciaServicio;
 import co.edu.unicauca.contratacionvri.excepciones.excepcionesPropias.EntidadNoExisteException;
 import co.edu.unicauca.contratacionvri.excepciones.excepcionesPropias.ReglaNegocioException;
@@ -82,6 +84,10 @@ public class ContratoServicioImpl implements IContratoServicio {
     private final IRubroServicio rubroServicio;
     private final IProyectoServicio proyectoServicio;
     private final IDependenciaServicio dependenciaServicio;
+    private final SeguimientoServicio seguimientoServicio;
+    private final PagoRepositorio pagoRepositorio;
+    private final ResumenContratoServicio resumenServicio;
+    private final ContratoDetalleSoporte soporte;
     private final int aniosAtras;
 
     public ContratoServicioImpl(ContratoRepositorio repositorio, ContratoObservacionRepositorio observacionRepositorio,
@@ -90,6 +96,8 @@ public class ContratoServicioImpl implements IContratoServicio {
                                 IClaseContratoServicio claseServicio, IOrdenadorGastoServicio ordenadorServicio,
                                 ICatalogoItemServicio catalogoServicio, IRubroServicio rubroServicio,
                                 IProyectoServicio proyectoServicio, IDependenciaServicio dependenciaServicio,
+                                SeguimientoServicio seguimientoServicio, PagoRepositorio pagoRepositorio,
+                                ResumenContratoServicio resumenServicio, ContratoDetalleSoporte soporte,
                                 @Value("${vri.contrato.anios-atras:1}") int aniosAtras) {
         this.repositorio = repositorio;
         this.observacionRepositorio = observacionRepositorio;
@@ -103,6 +111,10 @@ public class ContratoServicioImpl implements IContratoServicio {
         this.rubroServicio = rubroServicio;
         this.proyectoServicio = proyectoServicio;
         this.dependenciaServicio = dependenciaServicio;
+        this.seguimientoServicio = seguimientoServicio;
+        this.pagoRepositorio = pagoRepositorio;
+        this.resumenServicio = resumenServicio;
+        this.soporte = soporte;
         this.aniosAtras = aniosAtras;
     }
 
@@ -133,13 +145,19 @@ public class ContratoServicioImpl implements IContratoServicio {
     }
 
     @Override
+    public ResumenContratoDTORespuesta consultarResumen(Long id) {
+        return resumenServicio.resumen(buscarPorId(id));
+    }
+
+    @Override
     public PaginaRespuesta<ContratoResumenDTORespuesta> buscar(FiltroContratos filtro, int pagina, int tamanio) {
         validarRango("inicio", filtro.getInicioDesde(), filtro.getInicioHasta());
         validarRango("terminación", filtro.getTerminacionDesde(), filtro.getTerminacionHasta());
         Page<ContratoEntity> resultado = repositorio.findAll(ContratoEspecificaciones.de(criterios(filtro)),
                 PageRequest.of(pagina, tamanio, ORDEN));
         Map<Long, Long> pendientes = pendientesPorContrato(resultado.getContent());
-        return PaginaRespuesta.de(resultado, c -> aResumen(c, pendientes.getOrDefault(c.getId(), 0L)));
+        Map<Long, ResumenContratoDTORespuesta> resumenes = resumenServicio.resumenes(resultado.getContent());
+        return PaginaRespuesta.de(resultado, c -> aResumen(c, pendientes.getOrDefault(c.getId(), 0L), resumenes.get(c.getId())));
     }
 
     @Override
@@ -152,7 +170,7 @@ public class ContratoServicioImpl implements IContratoServicio {
     @Override
     @Transactional
     public ContratoDTORespuesta actualizar(Long id, ContratoActualizarDTOPeticion peticion) {
-        ContratoEntity contrato = buscarPorId(id);
+        ContratoEntity contrato = buscarBloqueado(id);
         validarNoAnulado(contrato);
         if (peticion.getTipoContratoId() != null && !peticion.getTipoContratoId().equals(contrato.getTipoContrato().getId())) {
             throw new ReglaNegocioException("El tipo de contrato no se puede cambiar: el número " + contrato.getNumero()
@@ -163,19 +181,23 @@ public class ContratoServicioImpl implements IContratoServicio {
                     + ") no se puede cambiar");
         }
         asignarDatos(contrato, peticion);
+        validarPagosParaActaFinal(contrato);
         contrato.recalcularEstado();
-        return aRespuesta(repositorio.save(contrato));
+        repositorio.save(contrato);
+        soporte.validarSaldo(contrato);
+        return aRespuesta(contrato);
     }
 
     @Override
     @Transactional
     public ContratoDTORespuesta registrarCierre(Long id, ContratoCierreDTOPeticion peticion) {
-        ContratoEntity contrato = buscarPorId(id);
+        ContratoEntity contrato = buscarBloqueado(id);
         validarNoAnulado(contrato);
         contrato.setFechaTerminacion(peticion.getFechaTerminacion());
         contrato.setFechaActaFinal(peticion.getFechaActaFinal());
         contrato.getPresupuesto().setFechaCertificacionPago(peticion.getFechaCertificacionPago());
         validarFechas(contrato);
+        validarPagosParaActaFinal(contrato);
         contrato.recalcularEstado();
         return aRespuesta(repositorio.save(contrato));
     }
@@ -222,7 +244,11 @@ public class ContratoServicioImpl implements IContratoServicio {
         c.setObjeto(Textos.limpiar(p.getObjeto()));
 
         c.setContratista(tercero(p.getContratistaId(), c.getContratista(), "contratista"));
-        c.setTipoSeguimiento(item(p.getTipoSeguimientoId(), c.getTipoSeguimiento(), CodigoCatalogo.TIPO_SEGUIMIENTO));
+        CatalogoItemEntity tipoSeguimiento = item(p.getTipoSeguimientoId(), c.getTipoSeguimiento(), CodigoCatalogo.TIPO_SEGUIMIENTO);
+        if (tipoSeguimiento != c.getTipoSeguimiento()) {
+            seguimientoServicio.validarTipoCompatible(c, tipoSeguimiento);
+        }
+        c.setTipoSeguimiento(tipoSeguimiento);
         c.setValorSinIva(p.getValorSinIva());
         c.setIva(p.getIva());
         c.setPlazoDias(p.getPlazoDias());
@@ -338,7 +364,7 @@ public class ContratoServicioImpl implements IContratoServicio {
     }
 
     /** Con fecha de suscripción el contrato debe estar completo. */
-    private static void validarSuscripcionCompleta(ContratoEntity c) {
+    private void validarSuscripcionCompleta(ContratoEntity c) {
         if (c.getFechaSuscripcion() == null) {
             return;
         }
@@ -355,6 +381,7 @@ public class ContratoServicioImpl implements IContratoServicio {
         faltaSi(faltan, pr.getFuenteFinanciacion(), "fuente de financiación");
         faltaSi(faltan, pr.getTipoAnticipo(), "tipo de anticipo");
         faltaSi(faltan, pr.getDependenciaSolicitante(), "dependencia que solicita");
+        faltan.addAll(seguimientoServicio.rolesFaltantes(c));
         if (!faltan.isEmpty()) {
             throw new ReglaNegocioException("Para registrar la suscripción faltan: " + String.join(", ", faltan));
         }
@@ -374,6 +401,24 @@ public class ContratoServicioImpl implements IContratoServicio {
                     ? "Solo se pueden crear contratos del año " + actual
                     : "Solo se pueden crear contratos de los años " + desde + " a " + actual);
         }
+    }
+
+    /** Si el contrato pactó N pagos, el acta final exige que estén los N. */
+    private void validarPagosParaActaFinal(ContratoEntity c) {
+        if (c.getFechaActaFinal() == null || c.getNumeroPagos() == null || c.getId() == null) {
+            return;
+        }
+        long registrados = pagoRepositorio.countByContratoId(c.getId());
+        if (registrados < c.getNumeroPagos()) {
+            throw new ReglaNegocioException("Para registrar el acta final faltan pagos: se pactaron " + c.getNumeroPagos()
+                    + " y hay " + registrados + (registrados == 1 ? " registrado" : " registrados"));
+        }
+    }
+
+    /** Bloquea la fila del contrato (los cambios de valor no deben cruzarse con un pago simultáneo) y trae el detalle. */
+    private ContratoEntity buscarBloqueado(Long id) {
+        repositorio.bloquear(id).orElseThrow(() -> new EntidadNoExisteException("No existe un contrato con id " + id));
+        return buscarPorId(id);
     }
 
     private static void validarNoAnulado(ContratoEntity c) {
@@ -532,7 +577,14 @@ public class ContratoServicioImpl implements IContratoServicio {
         r.setFechaAnulacion(c.getFechaAnulacion());
         r.setPresupuesto(aRespuesta(c.getPresupuesto()));
         r.setObservacionesPendientes(c.getId() == null ? 0 : observacionRepositorio.countByContratoIdAndResueltaFalse(c.getId()));
-        r.setAdvertencias(advertencias(c));
+        ResumenContratoDTORespuesta resumen = resumenServicio.resumen(c);
+        r.setResumen(resumen);
+        List<String> avisos = new ArrayList<>(advertencias(c));
+        if (c.getId() != null && !c.estaAnulado()) {
+            avisos.addAll(soporte.advertenciaCdp(c, resumen));
+            avisos.addAll(soporte.advertenciaAdiciones(resumen));
+        }
+        r.setAdvertencias(avisos);
         r.setCreadoEn(c.getCreadoEn());
         r.setActualizadoEn(c.getActualizadoEn());
         return r;
@@ -565,7 +617,7 @@ public class ContratoServicioImpl implements IContratoServicio {
         return r;
     }
 
-    private static ContratoResumenDTORespuesta aResumen(ContratoEntity c, long pendientes) {
+    private static ContratoResumenDTORespuesta aResumen(ContratoEntity c, long pendientes, ResumenContratoDTORespuesta resumen) {
         ContratoResumenDTORespuesta r = new ContratoResumenDTORespuesta();
         r.setId(c.getId());
         r.setNumero(c.getNumero());
@@ -584,6 +636,10 @@ public class ContratoServicioImpl implements IContratoServicio {
         r.setFechaInicio(c.getFechaInicio());
         r.setFechaTerminacion(c.getFechaTerminacion());
         r.setObservacionesPendientes(pendientes);
+        r.setValorFinal(resumen.getValorFinal());
+        r.setSaldo(resumen.getSaldo());
+        r.setAvanceFisicoReal(resumen.getAvanceFisicoReal());
+        r.setAvancePresupuestalReal(resumen.getAvancePresupuestalReal());
         return r;
     }
 }

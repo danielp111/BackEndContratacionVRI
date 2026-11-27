@@ -9,6 +9,7 @@ import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTOPeticion.Con
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.CampoContratoDTORespuesta;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ContratoDTORespuesta;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ContratoResumenDTORespuesta;
+import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ResumenContratoDTORespuesta;
 
 public interface IContratoServicio {
 
@@ -19,6 +20,9 @@ public interface IContratoServicio {
     ContratoDTORespuesta crear(ContratoCrearDTOPeticion peticion);
 
     ContratoDTORespuesta consultarPorId(Long id);
+
+    /** Solo los campos calculados (valor final, saldo, avances...). */
+    ResumenContratoDTORespuesta consultarResumen(Long id);
 
     /** Listado general paginado, ordenado del más reciente al más antiguo. */
     PaginaRespuesta<ContratoResumenDTORespuesta> buscar(FiltroContratos filtro, int pagina, int tamanio);

@@ -3,6 +3,7 @@ package co.edu.unicauca.contratacionvri.tercero.fachadaServicios.servicios;
 import java.util.Objects;
 
 import org.modelmapper.ModelMapper;
+import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -224,8 +225,8 @@ public class TerceroServicioImpl implements ITerceroServicio {
         if (actual != null && Objects.equals(actual.getId(), id)) {
             return actual;
         }
-        TerceroEntity tercero = repositorio.findById(id).orElseThrow(() ->
-                new ReglaNegocioException("El " + rol + " con id " + id + " no existe"));
+        TerceroEntity tercero = sinProxy(repositorio.findById(id).orElseThrow(() ->
+                new ReglaNegocioException("El " + rol + " con id " + id + " no existe")));
         if (!(tercero instanceof PersonaNaturalEntity persona)) {
             throw new ReglaNegocioException("El " + rol + " debe ser una persona natural y "
                     + tercero.getNombreCompleto() + " es persona jurídica");
@@ -266,8 +267,17 @@ public class TerceroServicioImpl implements ITerceroServicio {
     }
 
     private TerceroEntity buscarPorId(Long id) {
-        return repositorio.findById(id)
-                .orElseThrow(() -> new EntidadNoExisteException("No existe un tercero con id " + id));
+        return sinProxy(repositorio.findById(id)
+                .orElseThrow(() -> new EntidadNoExisteException("No existe un tercero con id " + id)));
+    }
+
+    /**
+     * Si el tercero ya estaba en la sesión como proxy perezoso (p. ej. el contratista de un contrato
+     * cargado antes), el proxy es de TerceroEntity y no de su subclase: {@code instanceof
+     * PersonaNaturalEntity} daría falso aunque lo sea. Se desempaqueta antes de preguntar.
+     */
+    private static TerceroEntity sinProxy(TerceroEntity tercero) {
+        return (TerceroEntity) Hibernate.unproxy(tercero);
     }
 
     // ------------------------------------------------------------------ normalización

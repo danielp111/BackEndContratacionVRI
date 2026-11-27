@@ -26,6 +26,7 @@ import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTOPeticion.Con
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.CampoContratoDTORespuesta;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ContratoDTORespuesta;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ContratoResumenDTORespuesta;
+import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.DTORespuesta.ResumenContratoDTORespuesta;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.servicios.FiltroContratos;
 import co.edu.unicauca.contratacionvri.contrato.fachadaServicios.servicios.IContratoServicio;
 import jakarta.validation.Valid;
@@ -89,6 +90,13 @@ public class ContratoRestController {
     public ResponseEntity<ContratoDTORespuesta> consultarPorId(
             @PathVariable @Positive(message = "El id debe ser positivo") Long id) {
         return ResponseEntity.ok(servicio.consultarPorId(id));
+    }
+
+    /** Solo los campos calculados: valor final, plazo total, saldo, avances, semestre en que finaliza... */
+    @GetMapping("/{id}/resumen")
+    public ResponseEntity<ResumenContratoDTORespuesta> consultarResumen(
+            @PathVariable @Positive(message = "El id debe ser positivo") Long id) {
+        return ResponseEntity.ok(servicio.consultarResumen(id));
     }
 
     /** Datos del abogado (formulario completo). */

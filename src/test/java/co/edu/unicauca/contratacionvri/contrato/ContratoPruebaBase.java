@@ -199,4 +199,34 @@ abstract class ContratoPruebaBase extends PruebaIntegracionBase {
     protected long crearContratoId(Map<String, Object> peticion) throws Exception {
         return crearContrato(peticion).get("id").asLong();
     }
+
+    /** Designa a Pedro como supervisor desde el 1 de enero (la suscripción lo exige). */
+    protected void designarSupervisor(long contratoId) throws Exception {
+        enviar("POST", URL + "/" + contratoId + "/seguimientos",
+                Map.of("rol", "SUPERVISOR", "terceroId", pedro.getId(), "desde", fecha(1, 1)))
+                .andExpect(status().isCreated());
+    }
+
+    /**
+     * Crea el contrato sin fechas, designa el supervisor y luego registra las fechas con un PUT: es el
+     * orden real, porque la suscripción exige el supervisor. Devuelve el resultado del PUT.
+     */
+    protected ResultActions crearYSuscribir(Map<String, Object> peticion) throws Exception {
+        Map<String, Object> sinFechas = new LinkedHashMap<>(peticion);
+        sinFechas.remove("fechaSuscripcion");
+        sinFechas.remove("fechaInicio");
+        sinFechas.remove("fechaTerminacion");
+        long id = crearContratoId(sinFechas);
+        designarSupervisor(id);
+        return enviar("PUT", URL + "/" + id, peticion);
+    }
+
+    protected long crearSuscritoId(Map<String, Object> peticion) throws Exception {
+        String cuerpo = crearYSuscribir(peticion).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return json.readTree(cuerpo).get("id").asLong();
+    }
+
+    protected void pagar(long contratoId, int valor, String fecha) throws Exception {
+        enviar("POST", URL + "/" + contratoId + "/pagos", Map.of("valor", valor, "fecha", fecha)).andExpect(status().isCreated());
+    }
 }
